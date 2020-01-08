@@ -4,15 +4,15 @@ Code for trait based simulations and niche assembly effects in bipartite network
 
 Last revision January 2020. 
 
-|TraitBasedNetworks
+  |TraitBasedNetworks
 
-  |Readme
+    |Readme
   
-  |Scripts
+      |Scripts
   
-      |-CustomFunctions.R
+        |-CustomFunctions.R
       
-      |-CondensedSimulScript.R
+        |-CondensedSimulScript.R
     
 
 
