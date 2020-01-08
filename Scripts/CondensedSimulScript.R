@@ -7,7 +7,7 @@
 source("scripts/CustomFunctions.R")
 
 
-## Note: Go trough the CustomFunctions script for details on the functions and the parameters 
+## Note: Go trough the CustomFunctions.R script for details on the functions and the parameters 
 
 ############################################################
 ############################################################
