@@ -7,9 +7,14 @@ Last revision January 2020.
       |TraitBasedNetworks
           |Readme
           |Scripts
-            |-CustomFunctions.R
-            |-CondensedSimulScript.R
+            |-CustomFunctions.R ## Customized functions to needed to run 
+            |-CondensedSimulScript.R ## Simulation workflow
+            |-Case_study.R # Case Study workflow 
+            |-PlotTraitDistNet.R # Plot sexi trait networks
+            |-RQL_ANDES.R # Matching trait analysis for the Ecuador Andes networks
     
 
+
+Contact: 
 
 gabriel.munoz@concordia.ca
