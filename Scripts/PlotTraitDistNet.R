@@ -73,21 +73,33 @@ plotInt <- function(net, maxInt, plot = F){
   return(net)
   
 }
-  
-
-
 # function to plot the results of plotInt function above. 
-makeTraitDens <- function(d){
-  plot(density(d$trait1),
-       frame = F,
-       col = "blue",
-       main = "", 
-       ylab = "Normalized interaction degree",
-       xlab  = "Trait value",
-       yaxt = "n",
-       xlim = c(0,1),
-       ylim = c(0,10))
-  points(density(d$trait2), type = "l", col = "red")
+makeTraitDens <- function(trait1, trait2, add = F, col = col, twolev = F, col2 = col2){
+  if(add == T){ 
+    points(density(trait1), 
+           type = "l",lwd = 2,
+         col = col)
+  }else{
+    plot(density(trait1),
+         frame = F,
+         col = col,
+         lwd = 2,
+         main = "", 
+         ylab = "Normalized interaction degree",
+         xlab  = "Trait value",
+         yaxt = "n",
+         xlim = c(0,1),
+         ylim = c(0,10))
+    
+    
+  }
+  if(twolev == T){ 
+  points(density(trait2), type = "l", lwd = 2,col = col2)
+    
+    }
+
+  
+  
 }
 ################# END FUNCTIONS ############
 
@@ -136,7 +148,9 @@ title("Neutral interactions", outer = T)
 # Plot trait distributions (if needed)
 ##############################
 
-makeTraitDens(d1)
+makeTraitDens(d1$trait1, col = "red")
+
+
 makeTraitDens(d2)
 makeTraitDens(d3)
 makeTraitDens(d4)
@@ -151,24 +165,142 @@ makeTraitDens(d8)
 
 
 
-## key number for now
-Poss
-########
+makeTraitDens(d)
+d <- plotInt(simul[[63]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait1, col = scales::alpha(dd[1], 0.5))
 
-rr <- simul[[63]][,1]$metrics[[1]]$bnet
-rr1 <- simul[[63]][,1]$metrics[[3]]$bnet
-rr2 <- simul[[63]][,1]$metrics[[5]]$bnet
-rrnl <- simul[[78]][,1]$metrics[[1]]$bnet
 
-nr <- simul[[61]][,1]$metrics[[1]]$bnet
-nr1 <- simul[[61]][,1]$metrics[[3]]$bnet
-nr2 <- simul[[61]][,1]$metrics[[5]]$bnet
-nrnl <- simul[[76]][,1]$metrics[[5]]$bnet
+se <- round(seq(100, 5000, length.out=10 ))
+se <- rev(se)
 
-fr <- simul[[62]][,1]$metrics[[1]]$bnet
-fr1 <- simul[[62]][,1]$metrics[[3]]$bnet
-fr2 <- simul[[62]][,1]$metrics[[5]]$bnet
-frnl <- simul[[77]][,1]$metrics[[5]]$bnet
+par(mfrow = c(1,2), mar = c(5,3,3,3))
+d <- plotInt(simul[[63]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait1, col = scales::alpha(dd[1], 0.5))
+dd <- f(seq(1:10), 10,"Spectral", rev = T)
+for(i in 1:length(se)){ 
+  d <- plotInt(simul[[63]][,1]$metrics[[5]]$bnet, se[i])
+  makeTraitDens(d$trait1, col = scales::alpha(dd[i], 0.2), add = T)
+  }
+       
+legend("topright", 
+       lty = 1,
+       cex = 0.7,
+       bty = "n",
+       title = "Total interaction richness",
+       legend = se,
+       col = dd)
+title("Consumer trophic level")
+d <- plotInt(simul[[63]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait2, col = scales::alpha(dd[1], 0.5))
+dd <- f(seq(1:10), 10,"Spectral", rev = T)
+for(i in 1:length(se)){ 
+  d <- plotInt(simul[[63]][,1]$metrics[[5]]$bnet, se[i])
+  makeTraitDens(d$trait2, col = scales::alpha(dd[i], 0.2), add = T)
+}
+
+legend("topright", 
+       lty = 1,
+       cex = 0.7,
+       bty = "n",
+       title = "Total interaction richness",
+       legend = se,
+       col = dd)
+title("Resource trophic level")
+title("Environmental filtering + Morphological matching", outer = T)
+
+############################## 
+# EF + N.assembly
+############################## 
+
+se <- round(seq(100, 5000, length.out=10 ))
+se <- rev(se)
+
+par(mfrow = c(1,2), mar = c(5,3,3,3))
+d <- plotInt(simul[[61]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait1, col = scales::alpha(dd[1], 0.5))
+dd <- f(seq(1:10), 10,"Spectral", rev = T)
+for(i in 1:length(se)){ 
+  d <- plotInt(simul[[61]][,1]$metrics[[5]]$bnet, se[i])
+  makeTraitDens(d$trait1, col = scales::alpha(dd[i], 0.2), add = T)
+}
+
+legend("topright", 
+       lty = 1,
+       cex = 0.7,
+       bty = "n",
+       title = "Total interaction richness",
+       legend = se,
+       col = dd)
+title("Consumer trophic level")
+
+
+
+d <- plotInt(simul[[61]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait2, col = scales::alpha(dd[1], 0.5))
+dd <- f(seq(1:10), 10,"Spectral", rev = T)
+for(i in 1:length(se)){ 
+  d <- plotInt(simul[[61]][,1]$metrics[[5]]$bnet, se[i])
+  makeTraitDens(d$trait2, col = scales::alpha(dd[i], 0.2), add = T)
+}
+
+legend("topright", 
+       lty = 1,
+       cex = 0.7,
+       bty = "n",
+       title = "Total interaction richness",
+       legend = se,
+       col = dd)
+title("Resource trophic level")
+title("Environmental filtering + Neutral assembly", outer = T)
+
+############################## 
+# Neutral + Mor.mat
+############################## 
+
+se <- round(seq(100, 5000, length.out=10 ))
+se <- rev(se)
+
+par(mfrow = c(1,2), mar = c(5,3,3,3))
+d <- plotInt(simul[[78]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait1, col = scales::alpha(dd[1], 0.5))
+dd <- f(seq(1:10), 10,"Spectral", rev = T)
+for(i in 1:length(se)){ 
+  d <- plotInt(simul[[78]][,1]$metrics[[5]]$bnet, se[i])
+  makeTraitDens(d$trait1, col = scales::alpha(dd[i], 0.2), add = T)
+}
+
+legend("topright", 
+       lty = 1,
+       cex = 0.7,
+       bty = "n",
+       title = "Total interaction richness",
+       legend = se,
+       col = dd)
+title("Consumer trophic level")
+
+
+
+d <- plotInt(simul[[78]][,1]$metrics[[5]]$bnet, 50)
+makeTraitDens(d$trait2, col = scales::alpha(dd[1], 0.5))
+dd <- f(seq(1:10), 10,"Spectral", rev = T)
+for(i in 1:length(se)){ 
+  d <- plotInt(simul[[78]][,1]$metrics[[5]]$bnet, se[i])
+  makeTraitDens(d$trait2, col = scales::alpha(dd[i], 0.2), add = T)
+}
+
+legend("topright", 
+       lty = 1,
+       cex = 0.7,
+       bty = "n",
+       title = "Total interaction richness",
+       legend = se,
+       col = dd)
+title("Resource trophic level")
+title("Neutral assembly + Morphological matching", outer = T)
+
+############################## 
+
+
 
 
 
