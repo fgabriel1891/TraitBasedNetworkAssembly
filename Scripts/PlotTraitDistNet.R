@@ -7,8 +7,7 @@
 ### Uncomment this first if need to upload  the rds files (when working outside the cluster server)
 #simul <- readRDS("EF_NL_simul_fixAug.rds")
 #traitNet <- readRDS("traitNet.rds")
-## key number for now
-Poss
+
 ## Building figure parts as requested by Emma 
 
 #### Four networks with indicated 
@@ -41,28 +40,42 @@ plotInt <- function(net, maxInt, plot = F){
   
   net <- net[sample(1:length(net$Var1),
                     maxInt, prob = net$intProb/max(net$intProb)),]
-  bnet <- xtabs(intProb ~ Var1 + Var2, net)
+  net$trait2 <- round(net$trait2,3)
+  net$trait1 <- round(net$trait1,3)
+  bnet <- xtabs(intProb ~ trait1 + trait2, net)
   bnet[bnet > 1] <-1
   
+  # 
+  # tb <- na.omit(net[match(colnames(bnet),net$trait2),])
+  # tb <- tb[order(tb$trait1, decreasing = T),]
+  # seq <-   list("seq.low" = tb$trait1, 
+  #               "seq.high" = tb$trait2[order(tb$trait2, decreasing = T)])
+  # t1 <- net$trait1[match(seq$seq.low,net$trait1)]
+  # t2 <- net$trait2[match(seq$seq.high,net$trait2)]
+  # 
+  # bnet <- bnet[match(seq$seq.low,rownames(bnet))
+  #              ,match(seq$seq.high,colnames(bnet))]
+  # 
+  as.numeric(rownames(bnet))
   if(plot == T){
     bipartite::plotweb(bnet,labsize = 0.0001,
-                       col.high = f(net$trait2, 3,"RdYlGn"),
-                       bor.col.high = "white",
-                       bor.col.low  = "white",
-                       bor.col.interaction = scales::alpha("white",0),
-                       col.low =  f(net$trait1, 3,"RdYlGn"),
-                       col.interaction = scales::alpha(col01(net$intProb),
-                                                       net$intProb/max(net$intProb)),
-                       method = "cca")
+                       col.high = col01( as.numeric(colnames(bnet))),
+                       bor.col.high = scales::alpha("grey", 0.3),
+                       bor.col.low  = scales::alpha("grey", 0.3),
+                       bor.col.interaction = scales::alpha("grey",0.2),
+                       col.low =  col01( as.numeric(rownames(bnet)))
+                       col.interaction = scales::alpha("grey", 0.3),
+                       # col.interaction = scales::alpha(col01(net$intProb),
+                       #                                 net$intProb/max(net$intProb)),
+                       method = "normal")
     
   }
-
-  
-
-  
   return(net)
   
-  }
+}
+  
+
+
 # function to plot the results of plotInt function above. 
 makeTraitDens <- function(d){
   plot(density(d$trait1),
@@ -78,28 +91,13 @@ makeTraitDens <- function(d){
 }
 ################# END FUNCTIONS ############
 
+# define objects 
 ### Plot networks for Morphological match ## big thing this are only considering networks assembled at the 5th quantile
 
 netSS <- traitNet$SEF_SEF_MM_0.2_0.2_0.1_0.1__[,1]$com
 netSW <- traitNet$SEF_SEF_MM_0.2_0.2_0.1_1__[,1]$com
 netWS <- traitNet$SEF_SEF_MM_0.2_0.2_1_0.1__[,1]$com
 netWW <- traitNet$SEF_SEF_MM_0.2_0.2_1_1__[,1]$com
-
-par(mfrow = c(4,2), oma = c(0,0,3,0))
-d <- plotInt(netWW, 20, plot = T)
-makeTraitDens(d)
-title("WeakA-WeakB")
-d <- plotInt(netWS, 20, plot = T)
-makeTraitDens(d)
-title("WeakA-StrongB")
-d <- plotInt(netSS, 20, plot = T)
-makeTraitDens(d)
-title("StrongA-StrongB")
-d <- plotInt(netSW, 50, plot = T)
-makeTraitDens(d)
-title("StrongA-WeakB")
-title("Environmental Filtering + Morphological matching, 50 most probable interactions", outer = T)
-
 
 ### Plot networks for Neutral Interactions
 
@@ -108,21 +106,48 @@ netSWnl <- traitNet$SEF_SEF_NL_0.2_0.2_0.1_1__[,1]$com
 netWSnl <- traitNet$SEF_SEF_NL_0.2_0.2_1_0.1__[,1]$com
 netWWnl <- traitNet$SEF_SEF_NL_0.2_0.2_1_1__[,1]$com
 
-par(mfrow = c(4,2), oma = c(0,0,3,0))
-d <- plotInt(netWWnl, 50, plot = T)
-makeTraitDens(d)
-title("WeakA-WeakB")
-d <- plotInt(netWSnl, 50, plot = T)
-makeTraitDens(d)
-title("WeakA-StrongB")
 
-d <- plotInt(netSSnl, 50, plot = T)
-makeTraitDens(d)
-title("StrongA-StrongB")
-d <- plotInt(netSWnl, 50, plot = T)
-makeTraitDens(d)
-title("StrongA-WeakB")
-title("Environmental Filtering + Neutral interactions, 50 most probable interactions", outer = T)
+
+### Plot networks 
+
+par(mfrow = c(1,4), mar = c(0,0,0,0))
+d1 <- plotInt(netWW, 40, plot = T)
+title("Weak-Weak")
+d2 <- plotInt(netWS, 40, plot = T)
+title("Weak-Strong")
+d3 <- plotInt(netSW, 40, plot = T)
+title("Strong-Weak")
+d4 <- plotInt(netSS, 40, plot = T)
+title("Strong-Strong")
+title("Morphological matching", outer = T)
+
+
+d5 <- plotInt(netWWnl, 40, plot = T)
+title("Weak-Weak")
+d6 <- plotInt(netWSnl, 40, plot = T)
+title("Weak-Strong")
+d7 <- plotInt(netSWnl, 40, plot = T)
+title("Strong-Weak")
+d8 <- plotInt(netSSnl, 40, plot = T)
+title("Strong-Strong")
+title("Neutral interactions", outer = T)
+
+############################################################
+# Plot trait distributions (if needed)
+##############################
+
+makeTraitDens(d1)
+makeTraitDens(d2)
+makeTraitDens(d3)
+makeTraitDens(d4)
+
+
+makeTraitDens(d5)
+makeTraitDens(d6)
+makeTraitDens(d7)
+makeTraitDens(d8)
+
+############################## 
 
 
 
