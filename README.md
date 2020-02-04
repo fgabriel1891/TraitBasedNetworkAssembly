@@ -10,7 +10,7 @@ Last revision January 2020.
             |-CustomFunctions.R ## Customized functions to needed to run 
             |-CondensedSimulScript.R ## Simulation workflow
             |-Case_study.R # Case Study workflow 
-            |-PlotTraitDistNet.R # Plot sexy trait networks
+            |-PlotTraitDistNet.R # Plot "sexy" trait networks
             |-RQL_ANDES.R # Matching trait analysis for the Ecuador Andes networks
     
 
