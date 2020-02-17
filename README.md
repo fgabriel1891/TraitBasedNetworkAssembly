@@ -12,6 +12,9 @@ Last revision January 2020.
             |-Case_study.R # Case Study workflow 
             |-PlotTraitDistNet.R # Plot "sexy" trait networks
             |-RQL_ANDES.R # Matching trait analysis for the Ecuador Andes networks
+          |TempPlots
+            |-Env.Filtering.png # Test for environmental filtering
+            |-NullCaseStudy.png # Raw results of the null model approach for the case study
     
 
 
