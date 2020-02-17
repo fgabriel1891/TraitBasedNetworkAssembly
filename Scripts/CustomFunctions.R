@@ -1076,8 +1076,7 @@ makeNull <- function(matrix,nullSim){
 
 ######
 # function to calculate nestedness z-scores 
-
-function(matrix, nullSim){
+makeNullNes <- function(matrix, nullSim){
   # make into binary network first
   matrix[matrix > 0] <- 1
   # remove 0s 
