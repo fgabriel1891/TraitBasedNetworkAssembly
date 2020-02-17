@@ -18,6 +18,9 @@ Last revision January 2020.
     
 
 
+Comments, bugs, and/or suggestions please open an issue [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
+
+
 Contact: 
 
 gabriel.munoz@concordia.ca
