@@ -2,7 +2,7 @@
 
 Code for trait based simulations and niche assembly effects in bipartite network structure.
 
-Last revision January 2020. 
+Last revision February 2020. 
 
       |TraitBasedNetworks
           |Readme
