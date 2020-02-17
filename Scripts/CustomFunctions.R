@@ -50,6 +50,8 @@ CreateSpPool <- function(Jpool, J, poolShape = c("uniform", "log-series")) {
     
   }
 
+  
+  
  
   return(list( "poolA" = poola, "poolB" = poolb))
   
@@ -1051,7 +1053,42 @@ resLoww <- function(x,y){
 
 ###########################
 ###########################
+## Function to calculate Modularity Z-scores
+makeNull <- function(matrix,nullSim){
+  matrix <-matrix[as.logical(rowSums(matrix != 0)), as.logical(colSums(matrix != 0))]
+  
+  matrix <- as.matrix.data.frame(matrix)
+  print(dim(matrix))
+  mod <- bipartite::computeModules(matrix)
+  vn <- vegan::nullmodel(matrix, "r1")
+  vns <- simulate(vn, nullSim)
+  if(dim(matrix)[1] < 3){
+    print("Too small of a network")
+    return(0)
+    
+  } else{ 
+    null <- sapply(1:nullSim, function(x) bipartite::computeModules(vns[,,x])@likelihood)
+    modES <- (mod@likelihood - mean(null))/sd(null)
+    return(modES)
+    
+  }
+}
 
+######
+# function to calculate nestedness z-scores 
+
+function(matrix, nullSim){
+  # make into binary network first
+  matrix[matrix > 0] <- 1
+  # remove 0s 
+  matrix <-matrix[as.logical(rowSums(matrix != 0)), as.logical(colSums(matrix != 0))]
+  matrix <- as.matrix.data.frame(matrix)
+  nes <- vegan::nestednodf(matrix)$statistic["NODF"]
+  vn <- vegan::nullmodel(matrix, "r1")
+  vns <- simulate(vn, nullSim)
+  null <- sapply(1:nullSim, function(x) vegan::nestednodf(vns[,,x])$statistic["NODF"])
+  modES <- (nes - mean(null))/sd(null)
+  return(modES)}
 
 
 
