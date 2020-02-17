@@ -24,6 +24,8 @@ pool <- data.frame(
         dataSet1$aT[match(dataSet1$N$animalCode, dataSet1$aT$animalCode),][,c(2:5)],
         "RQLp" = intRQL$RLQan[match(dataSet1$N$animalCode, intRQL$animalCode)],
         "RQLa" = intRQL$RLQan[match(dataSet1$N$plantCode, intRQL$plantCode)])
+pool$intID <- paste0(pool$plantCode,pool$animalCode)
+
 
 # define function to test for environmental filtering 
 test4EF <- function(pool, traitName, side = "P"){ 
@@ -85,6 +87,7 @@ EFAnimal$site <- pool$site[match(rownames(EFAnimal), pool$site)]
 # Examine e. filt effect sizes. 
 
 
+png("Figs/EnvFiltCaseStudy.png", width = 1000, height = 1000, pointsize = 30)
 plot(log1p(EFAnimal[,5])~EFAnimal$elev, ylim = c(0.001,8),
      ylab = "SES RLQ (log)", xlab = "Elevation", 
      col = "skyblue",
@@ -95,7 +98,11 @@ points(log1p(EFAnimal[,5])~EFAnimal$elev,cex=2)
 points(log1p(EFPlant[,5])~EFPlant$elev, 
        cex = 2, pch = 16, col = "firebrick")
 points(log1p(EFPlant[,5])~EFPlant$elev,cex = 2)
-
+legend("topright",bty = "n",
+       col = c("skyblue", "firebrick"),
+       pch = 16, cex = 2, 
+       legend = c("Animals", "Plants"))
+dev.off()
 
 
 ## simulate a species pool with uniform distribution of traits 
@@ -172,6 +179,7 @@ deltaNetSt <- function(pool, simulNet, site){
         ln <- length(unique(obs$intID))
         print(ln)
         null  <- simulNet[sample(1:length(simulNet$a), ln, prob = simulNet$pab),]
+        print(null)
 
         
         # create matrix 
@@ -204,21 +212,23 @@ funB <- lapply(unique(dataSet1$N$site),
                function(x) approxfun(density(intRQL$RLQan[intRQL$site == x])))
 names(funB) <- unique(dataSet1$N$site)
 
-
+simulNet[sample(1:length(simulNet$a), ln, prob = simulNet$pab),]
 ####################
 #AnBoIn
 ####################
 AnBoIn <- c()
 delt_AnBoIn <-c()
-for(i in 1:length(unique(dataSet1$N$site))) { 
+for(j in 1:length(unique(dataSet1$N$site))) { 
         
         v <- unique(dataSet1$N$site)
-        AnBoIn[[i]] <- customNetw(simPool, 120,124,
+        
+        AnBoIn[[j]] <- customNetw(simPool, 120,124,
                                   Nass = T, NassB = F,
                                   intHyp = "NL",
-                                  funA[[i]], funB[[i]])
-        print(i)
-        delt_AnBoIn[[i]] <- deltaNetSt(pool, AnBoIn[[i]], v[i])
+                                  funA[[j]], funB[[j]])
+        
+        
+        delt_AnBoIn[[j]] <- deltaNetSt(pool, AnBoIn[[j]], v[j])
         
         }
 
@@ -252,6 +262,7 @@ for(i in 1:length(unique(dataSet1$N$site))) {
 }
 
 
+names(pool)
 names(delt_AoBoIn) <- unique(dataSet1$N$site)
 reshape2::melt(delt_AoBoIn)
 
@@ -372,17 +383,6 @@ plot(res_AoBnIn$nes~res_AoBnIn$mod,
 points(res_AoBnIn$nes~res_AoBnIn$mod,
        pch = 16, cex = log(res_AoBnIn$RQLp), col = scales::alpha("skyblue",0.5))
 abline(0,1)
-
-
-
-
-
-
-
-
-
-
-
 
 
 
