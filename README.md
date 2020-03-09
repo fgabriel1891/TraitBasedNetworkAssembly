@@ -2,7 +2,7 @@
 
 Code for trait based simulations and niche assembly effects in bipartite network structure.
 
-Last revision February 2020. 
+Last revision March 2020. 
 
       |TraitBasedNetworks
           |Readme
@@ -13,8 +13,7 @@ Last revision February 2020.
             |-PlotTraitDistNet.R # Plot "sexy" trait networks
             |-RQL_ANDES.R # Matching trait analysis for the Ecuador Andes networks
           |TempPlots
-            |-Env.Filtering.png # Test for environmental filtering
-            |-NullCaseStudy.png # Raw results of the null model approach for the case study
+          
     
 
 
