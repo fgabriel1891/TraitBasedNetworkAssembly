@@ -1,0 +1,612 @@
+## "Probabilistic species pools and Environmental Filtering sensitivity analysis"
+## "Gabriel Muñoz
+## May 2020 
+
+#######
+# CUSTOM FUNCTIONS
+#######
+
+
+# Custom function to geoprocess the raster into cost-distane matrices based on points 
+
+CustomCostDist <- function(raster, centroids ){ 
+  centroidPoint <- sp::SpatialPoints(raster::coordinates(centroids[,c(1,2)]))
+  ## change raster into transition matrices 
+  ## (cost of moving pixel = mean btw pixels, 4 directions), and geocorrect for planar geometries
+  tr <- transition( 1/raster, transitionFunction = mean, directions = 4 )
+  tr <- geoCorrection( tr, type="c", multpl=FALSE, scl=FALSE)
+  ## Get costDistance pairwise matrices
+  eDist <- costDistance( tr, centroidPoint )
+  eDist <- as.matrix(eDist)
+  # Fix row and col names
+  rownames(eDist) <- colnames(eDist) <- centroids$site
+  return(eDist)
+}
+
+
+### Helper functions 
+
+## Lets define first a series of helpful functions to be able to calculate Environmental Filtering intensity and to try different combinations of methodologies as sensitivity analisis 
+
+
+## make a helper function that accepts a diversity scalar and returns a list of species randomized, based on the probabilities of the probPool
+
+SpeciesSampler <- function(divVec, ProbPool, pool, PoA = "P"){
+  # select one site location
+  
+  probSite <- ProbPool[rownames(ProbPool) == names(divVec),]
+  # make a distribution of n sites to pick a species from it 
+  sitesToSample <-replicate(divVec,names(sample(probSite, 1,prob = probSite)))
+  
+  # iterate over this sample and pick a random species from the pool, based on the site to match 
+  if(PoA == "P"){
+    spSampled <- sapply(1:length(sitesToSample), function(x) sample(unique(pool$plantCode[pool$site == sitesToSample[x]]), 1))
+  }
+  
+  if(PoA == "A"){
+    spSampled<-  sapply(1:length(sitesToSample), function(x) sample(unique(pool$animalCode[pool$site == sitesToSample[x]]), 1))
+  }
+  
+  return(spSampled)
+}
+
+
+## make a funtion that feeds on "SpeciesSampler function over diversity vector, change n in `replicate` to change the number of replicates
+
+
+NullTraitDiv <- function(divVec,ProbPool, pool, nrep, PoA ){
+  NullSites <- sapply(1:length(divVec),
+                      function(x)
+                        replicate(nrep,
+                                  SpeciesSampler(divVec[x], ProbPool, pool, PoA )))
+  
+  names(NullSites) <- names(divVec)
+  return(NullSites)
+  
+}
+
+# make helper function that accepts NullTr and iterates based on site name and returns the distribution of range of null models 
+
+ZdisCalR <- function(sitename, NullTr, PoA = "P"){
+  
+  toAg <- NullTr[NullTr$L1 == sitename,]
+  if(PoA == "P"){ 
+    AgRang <- aggregate(toAg$RQLp, list(toAg$Var2), range)
+  }
+  if(PoA == "A"){
+    AgRang <- aggregate(toAg$RQLa, list(toAg$Var2), range)
+  }
+  Zdis <- abs(AgRang$x[,1]-AgRang$x[,2])
+  return(Zdis)
+}
+
+# make helper function that accepts NullTr and iterates based on site name and returns the distribution of sd of null models 
+
+ZdisCalSD <- function(sitename, NullTr, PoA = "P"){
+  toAg <- NullTr[NullTr$L1 == sitename,]
+  if(PoA == "P"){
+    AgRang <- aggregate(toAg$RQLp, list(toAg$Var2), sd)
+  }
+  if(PoA == "A"){
+    AgRang <- aggregate(toAg$RQLa, list(toAg$Var2), sd)
+  }
+  return(AgRang$x)
+}
+
+
+
+## Defining the main function to test for environmental filtering, feeding on all helper functions above.
+
+# Since we have now defined the series of helper functions, now let's bind them all together into a logical framework function that allow to try various settings for the sensitivity analisis 
+
+
+test4EF <- function(pool,
+                    traitName, 
+                    nrep = 100,
+                    side = c("P","A"),
+                    RoP = c("Prob","Random"), 
+                    sdOrRange = c("sd", "range"), 
+                    ProbPool = ProbPool){ 
+  
+  
+  
+  ## calculate observed sd or range
+  if(sdOrRange == "sd"){
+    # calculate sd 
+    obsDis <- aggregate(pool[[traitName]], list(pool$site), sd)$x
+    names(obsDis) <- levels(pool$site)
+    
+    
+  }
+  if(sdOrRange == "range"){
+    # calculate range
+    obsMin <- aggregate(pool[[traitName]], list(pool$site), min)$x
+    obsMax <- aggregate(pool[[traitName]], list(pool$site), max)$x
+    obsDis <- abs(obsMin-obsMax)
+    names(obsDis) <- levels(pool$site)
+    
+    
+  }
+  
+  ## Create null models (random or process based)
+  if(RoP == "Random"){
+    # create randomized null models 
+    if(side == "P"){
+      # get diversity of plants
+      divVec <- colSums(ifelse(table(pool$plantCode,pool$site) > 1, 1,0))
+      if(sdOrRange == "sd"){
+        # make null model 
+        nullDis <- lapply(divVec, function(x) replicate(nrep,
+                                                        sd(unlist(pool[traitName])[
+                                                          match(sample(unique(pool$plantCode), x), 
+                                                                pool$plantCode)] )))
+      }
+      if(sdOrRange == "range"){
+        nullRang <- lapply(divVec, function(x) replicate(nrep,
+                                                         range(unlist(pool[traitName])[
+                                                           match(sample(unique(pool$plantCode), x), 
+                                                                 pool$plantCode)] )))
+        
+        
+        nullDis <- lapply(nullRang, function(x) diff(x))
+      } 
+    }
+    if(side == "A"){
+      # get diversity of animals
+      divVec <- colSums(ifelse(table(pool$animalCode,pool$site) > 1, 1,0))
+      # make null model 
+      if(sdOrRange == "sd"){
+        # make null model 
+        nullDis <- lapply(divVec, function(x) replicate(nrep,
+                                                        sd(unlist(pool[traitName])[
+                                                          match(sample(unique(pool$animalCode), x), 
+                                                                pool$animalCode)] )))
+      }
+      if(sdOrRange == "range"){
+        nullRang <- lapply(divVec, function(x) replicate(nrep,
+                                                         range(unlist(pool[traitName])[
+                                                           match(sample(unique(pool$animalCode), x), 
+                                                                 pool$animalCode)] )))
+        
+        
+        nullDis <- lapply(nullRang, function(x) diff(x))
+      } 
+      
+    }
+    
+  }
+  if(RoP == "Prob"){
+    if(side == "P"){
+      divVecPlant <- colSums(ifelse(table(pool$plantCode,pool$site) > 1, 1,0))
+      
+      
+      # plants
+      NullTrP <- NullTraitDiv(divVecPlant,ProbPool,pool, nrep , "P")
+      NullTrP <- reshape2::melt(NullTrP)
+      NullTrP$RQLp <- pool$RQLp[match(NullTrP$value,pool$plantCode )]
+      if(sdOrRange == "range"){
+        nullDis <- lapply(1:length(unique(NullTrP$L1)), 
+                          function(x)
+                            ZdisCalR(unique(NullTrP$L1)[x],NullTrP, "P" ))
+        
+      }
+      if(sdOrRange == "sd"){
+        
+        nullDis <- lapply(1:length(unique(NullTrP$L1)), 
+                          function(x)
+                            ZdisCalSD(unique(NullTrP$L1)[x],NullTrP, "P" ))
+      }
+      
+      
+    }
+    if(side == "A"){
+      divVecAn <- colSums(ifelse(table(pool$animalCode,pool$site) > 1, 1,0))
+      # animals 
+      NullTrA <- NullTraitDiv(divVecAn,ProbPool,pool, nrep, "A" )
+      NullTrA <- reshape2::melt(NullTrA)
+      NullTrA$RQLa <- pool$RQLa[match(NullTrA$value,pool$animalCode )]
+      
+      if(sdOrRange == "range"){
+        nullDis <- lapply(1:length(unique(NullTrA$L1)), 
+                          function(x)
+                            ZdisCalR(unique(NullTrA$L1)[x],NullTrA, "A" ))
+      }
+      
+      if(sdOrRange == "sd"){
+        nullDis <- lapply(1:length(unique(NullTrA$L1)), 
+                          function(x)
+                            ZdisCalSD(unique(NullTrA$L1)[x],NullTrA, "A" ))
+      }
+      
+    }
+  }
+  
+  
+  # calculate sd and mean from null dist 
+  sdNull <- sapply(nullDis, function(x) sd(x))
+  xNull <- sapply(nullDis, function(x) mean(x))
+  
+  # compute ses
+  SES <- (obsDis-xNull )/sdNull
+  
+  return(SES)
+  
+}
+
+
+
+## Defining process based species pools to evaluate environmental filtering intensity of plant-frugivore networks in the Ecuadorian Andes. 
+
+# In this script a probabilistic species pool will be defined based on environmental + geographic  distance matrices. The environmental matrix will contain environmental multivariate distances calculated in relation of slope, elevation, temperature (mean anual temperature) and precipitation (mean anual precipitation) in the study zone
+# Slope and elevation are derived from a digital elevation model obtained with radar satellite remote sensing (NASA SRTM shuttle) (https://cgiarcsi.community/data/srtm-90m-digital-elevation-database-v4-1/)
+# Temperature and precipitation correspond to the variables BIO01 and BIO12 of WORLDCLIM (https://developers.google.com/earth-engine/datasets/catalog/WORLDCLIM_V1_BIO#bands)
+                                                                                         
+                                                                                        
+# Load libraries and corresponding data
+library(gdistance)
+library(ade4)
+library(vegan)
+
+# load raw coordinates of collection data 
+locCoord <- readxl::read_xlsx("data_package/data/CoordinatesEcuador.xlsx")
+# get centroids for each of collected sites
+centroids <- data.frame("lon" = aggregate(locCoord$Lon, by = list(locCoord$Plot), mean)$x,
+                        "lat" = aggregate(locCoord$Lat, by = list(locCoord$Plot), mean)$x,
+                        "site" = unique(locCoord$Plot)[order(unique(locCoord$Plot))])
+
+# Load environmental resistance layers (exported from earthengine, https://code.earthengine.google.com/14fe67bd4749c1f90a253f6cfaa05ff9)
+
+SlopeLoja <- raster::raster("data_package/data/LojaSlope.tif")
+ClimLoja <- raster::raster("data_package/data/LojaClim.tif")
+PrecLoja <- raster::raster("data_package/data/LojaPrec.tif")
+ElevLoja <- raster::raster("data_package/data/LojaElevation.tif")
+
+# Visualize sites in environmental space
+
+par(mfrow = c(2,2), mar = c(2,2,2,2))
+raster::plot(SlopeLoja, main = "Slope")
+points(centroids$lon,centroids$lat, pch = "+")
+
+raster::plot(ClimLoja, main = "Temp")
+points(centroids$lon,centroids$lat, pch = "+")
+
+raster::plot(PrecLoja, main = "Prec")
+points(centroids$lon,centroids$lat, pch = "+")
+
+raster::plot(ElevLoja, main = "Elev")
+points(centroids$lon,centroids$lat, pch = "+")
+
+
+# Let's apply the custom made function to calculate cost-path distances in environmental space and standardize the distance matrices based on their range maxima 
+
+eDistSlope <- CustomCostDist(SlopeLoja, centroids)
+eDistTemp <- CustomCostDist(ClimLoja, centroids)
+eDistPrec <- CustomCostDist(PrecLoja, centroids)
+eDistElev <- CustomCostDist(ElevLoja, centroids)
+
+# standardize variables
+
+slopeDist <- decostand(eDistSlope, "range")
+ClimDist <- decostand(eDistTemp, "range")
+eDistPrec <- decostand(eDistPrec, "range")
+eDistElev <- decostand(eDistElev, "range")
+
+# Reducing the dimensionality of the environmental distance matrices into linear components
+
+pcaSlope <- princomp(slopeDist)
+pcaTemp <- princomp(ClimDist)
+pcaPrec <- princomp(eDistPrec)
+pcaElev <- princomp(eDistElev)
+
+
+# How many components are relevant for each variable? 
+
+par(mfrow = c(2,2))
+plot(pcaSlope)
+plot(pcaTemp)
+plot(pcaPrec)
+plot(pcaElev)
+
+# It seems that 2 components for each variable are sufficient and explain most of the variance of each environmental distance matrix
+# Let's put together  a new data.frame with the relevant components 
+
+EnvVar <- data.frame("Temp" =scores(pcaTemp)[,c(1:2)],
+                     "Slope" =scores(pcaSlope)[,c(1:2)],
+                     "Prec" =scores(pcaPrec)[,c(1:2)],
+                     "Elev" =scores(pcaElev)[,c(1:2)])
+
+
+# make a new PCA to reduce dimensionality
+EnvPCA <- vegan::rda(EnvVar)
+biplot(EnvPCA) # first axis = 59% of variation 
+# extract scores from the first axis
+siteScores <- scores(EnvPCA)$sites[,1]
+# calculate pairwise euclidian distances from first axis 
+# and normalize to inverse of max distance to create a probability distribution
+distAx1 <- dist(siteScores)
+probMatrix <- 1-(distAx1/max(distAx1))
+
+
+# We have defined now our probability matrix for the environmental variables, this represents the probabilities of species contribution 
+# from each of the site communities to generate the species pools for any other site. 
+# Based only on environmental variables (slope, elevation, precipitation, temperature)
+
+probMatrix # environmental probability matrix 
+
+# Since we have defined our environmental probabilities, let's now define the geographic probabilities. 
+# We will do this by calculating simple euclidean distances from one site to another (i.e. as the crow flies distances). 
+# We will transform this matrix into a probabilistic one, using the same equation we used above for the environmental matrix 
+# $$ 1-\frac{D}{max(D)}$$ being now D, the pairwise euclidian distances in geographical space. 
+
+
+## construct now a probability matrix based on euclidean distances (as the crow flies)
+EucDist <- spatstat::pairdist(centroids$lat, centroids$lon)
+# name matrix appropiately
+rownames(EucDist) <- colnames(EucDist) <- centroids$site
+# standardize 
+EucDist <- decostand(EucDist, "range")
+# make into probMat
+EucDist <- 1-EucDist
+EucDist # probability matrix
+
+# Since we have now our environmental and geographical matrices let's combine them into a single one. 
+# We will do this by assigning equal weights to each one. Since they are both normalized into a 0-1 range we can use the sum of both matrices multiplied each by the same scalar (0.5)
+# $$ PM = 0.5EM + 0.5GM $$ where $PM$ = the probabilistic matrix to sample sites when generating our species pools, $EM$ = Environmental probability matrix, $GM$ Geographical probability matrix. 
+
+## weight the probability matrix based on environmental variables, with the one of simple euclidean distances, assign equal weights
+ProbPool <- (0.5*(EucDist))+ (0.5*(as.matrix(probMatrix)))
+
+# Let's visualize how our probabilisitic species pools are delineated among sites. 
+# Visualize the delination of species pool selection 
+par(oma =c(4,4,2,2))
+heatmap(ProbPool)
+
+# We can observe the formation of clusters, this means that the pool of species for any site are more likely to come from the observed species in their cluster.
+# (e.g.) Bellavista and Cajanuma are part of the same cluster, hence their pool of species are more similar than for Bellavista and Bombuscaro.  
+
+source("data_package/rlq_analysis.R") # Source RLQ analysis to get RQL trait values
+
+pool <- data.frame(
+  dataSet1$N,
+  dataSet1$pT[match(dataSet1$N$plantCode, dataSet1$pT$plantCode),][,c(2:5)],
+  dataSet1$aT[match(dataSet1$N$animalCode, dataSet1$aT$animalCode),][,c(2:5)],
+  "RQLp" = intRQL$RLQan[match(dataSet1$N$animalCode, intRQL$animalCode)],
+  "RQLa" = intRQL$RLQan[match(dataSet1$N$plantCode, intRQL$plantCode)])
+pool$intID <- paste0(pool$plantCode,pool$animalCode)
+
+
+# make the sensitivity analysis
+
+
+# Plants
+# randomized pool -sd
+myEF_r_sd_p <- test4EF(pool = pool,
+                       traitName = "RQLp", 
+                       nrep = 100, 
+                       side = "P",
+                       sdOrRange = "sd",
+                       RoP = "Random",
+                       ProbPool = ProbPool )
+myEF2_r_sd_a <- test4EF(pool = pool, 
+                        traitName = "RQLa",
+                        nrep = 100, 
+                        side = "A",
+                        sdOrRange = "sd",
+                        RoP = "Random", 
+                        ProbPool = ProbPool )
+# randomized pool -range
+myEF_r_ran_p <- test4EF(pool = pool, 
+                        traitName = "RQLp", 
+                        nrep = 100, 
+                        side = "P",
+                        sdOrRange = "range",
+                        RoP = "Random", 
+                        ProbPool = ProbPool )
+myEF2_r_ran_a <- test4EF(pool = pool, 
+                         traitName = "RQLa",
+                         nrep = 100,
+                         side = "A",
+                         sdOrRange = "range",
+                         RoP = "Random", 
+                         ProbPool = ProbPool )
+# probabilistic pool -sd
+myEF_pro_sd_p <- test4EF(pool = pool, 
+                         traitName = "RQLp",
+                         nrep = 100, 
+                         side = "P", 
+                         sdOrRange = "sd",
+                         RoP = "Prob",
+                         ProbPool = ProbPool )
+myEF2_pro_sd_a <- test4EF(pool = pool, 
+                          traitName = "RQLa", 
+                          nrep = 100, 
+                          side = "A", 
+                          sdOrRange = "sd",
+                          RoP = "Prob", 
+                          ProbPool = ProbPool )
+# probabilistic pool -sd
+myEF_pro_ran_p <- test4EF(pool = pool, 
+                          traitName = "RQLp", 
+                          nrep = 100, 
+                          side = "P", 
+                          sdOrRange = "range",
+                          RoP = "Prob", 
+                          ProbPool = ProbPool )
+myEF2_pro_ran_a <- test4EF(pool = pool, 
+                           traitName = "RQLa",
+                           nrep = 100, side = "A", 
+                           sdOrRange = "range",
+                           RoP = "Prob", 
+                           ProbPool = ProbPool )
+
+
+### Sensitivity analisis of environmental filtering in Plant communities 
+
+# Values above 0 indicate environmental filtering, Values below 0 indicate dispersion 
+# 
+# Ranges between (-1.96, 1.96) are not considering significant; p>0.05
+
+par(mfrow = c(2,2), oma = c(2,2,2,2), mar = c(2,1,1,1))
+plot(-(myEF_r_sd_p)~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Random + sd",
+     ylim = c(-3,3),
+     xlab = "Elevation")
+abline(h=0)
+
+plot(-(myEF_r_ran_p)~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Random + range",
+     ylim = c(-3,3),
+     xlab = "Elevation")
+abline(h=0)
+
+plot(myEF_pro_sd_p~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Prob + sd",
+     ylim = c(-3,3),
+     xlab = "Elevation")
+abline(h=0)
+plot(myEF_pro_ran_p~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Prob + range",
+     ylim = c(-3,3),
+     xlab = "Elevation")
+abline(h=0)
+title("Testing EF in Plants", outer = "T")
+
+
+
+### Sensitivity analysis of environmental filtering in Animal communities
+
+# Values above 0 indicate environmental filtering, Values below 0 indicate dispersion 
+# 
+# Ranges between (-1.96, 1.96) are not considering significant; p>0.05
+
+
+par(mfrow = c(2,2), oma = c(2,2,2,2), mar = c(2,1,1,1))
+plot(-(myEF2_r_sd_a)~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Random + sd",
+     ylim = c(-10,10),
+     xlab = "Elevation")
+abline(h=0)
+
+plot(-(myEF2_r_ran_a)~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Random + range",
+     ylim = c(-10,10),
+     xlab = "Elevation")
+abline(h=0)
+
+plot(myEF2_pro_sd_a~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Prob + sd",
+     ylim = c(-10,10),
+     xlab = "Elevation")
+abline(h=0)
+plot(myEF2_pro_ran_a~c(1000,1000,2000,2000,3000,3000), 
+     ylab = "SES",
+     main = "Prob + range",
+     ylim = c(-10,10),
+     xlab = "Elevation")
+abline(h=0)
+title("Testing EF in Animals", outer = "T")
+
+
+
+
+## Probabilistic pools and process strength symmetry. 
+
+## process strength symmetry direction 
+
+par(mfrow = c(2,2), oma = c(2,2,2,2), mar = c(3,3,3,3))
+# animals over plants 
+
+PS1 <- log((myEF2_r_ran_a/myEF_r_ran_p)^2)
+
+plot(PS1/max(PS1),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(-1,1),
+     main = "random + range",
+     xlab = "Process strength symmetry (ratio)")
+abline(v = 0)
+
+PS2 <- log((myEF2_r_sd_a/myEF_r_sd_p)^2)
+
+plot(PS2/max(abs(PS2)),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(-1,1),
+     main = "random + sd",
+     xlab = "Process strength symmetry (ratio)")
+abline(v = 0)
+
+
+PS1 <- log((myEF2_pro_ran_a/myEF_pro_ran_p)^2)
+
+plot(PS1/max(abs(PS1)),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(-1,1),
+     main = "prob + range",
+     xlab = "Process strength symmetry (ratio)")
+abline(v = 0)
+
+PS2 <- log((myEF2_pro_sd_a/myEF_pro_sd_p)^2)
+
+plot(PS2/max(abs(PS2)),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(-1,1),
+     main = "prob + sd",
+     xlab = "Process strength symmetry (ratio)")
+abline(v = 0)
+
+
+### Process strength symmetry magnitude
+
+# animals over plants 
+par(mfrow = c(2,2), oma = c(2,2,2,2), mar = c(3,3,3,3))
+
+PS1 <- log(sqrt((myEF2_r_ran_a-myEF_pro_ran_p)^2)+1)
+
+plot(PS1/max(PS1),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(0,1),
+     main = "random + range",
+     xlab = "Process strength symmetry (diff)")
+abline(v = 0)
+
+PS2 <- log(sqrt((myEF2_r_sd_a-myEF_pro_sd_p)^2)+1)
+
+plot(PS2/max(PS2),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(0,1),
+     main = "random + sd",
+     xlab = "Process strength symmetry (diff)")
+abline(v = 0)
+
+
+PS1 <- log(sqrt((myEF2_pro_ran_a-myEF_pro_ran_p)^2)+1)
+
+plot(PS1/max(PS1),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(0,1),
+     main = "prob + range",
+     xlab = "Process strength symmetry (diff)")
+abline(v = 0)
+
+PS2 <- log(sqrt((myEF2_pro_sd_a-myEF_pro_sd_p)^2)+1)
+
+plot(PS2/max(PS2),c(1000,1000,2000,2000,3000,3000),  
+     ylab = "Elevation", 
+     xlim = c(0,1),
+     main = "prob + sd",
+     xlab = "Process strength symmetry (diff)")
+abline(v = 0)
+
+
+
+
+
+
+
+
