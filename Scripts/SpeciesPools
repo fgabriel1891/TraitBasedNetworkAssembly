@@ -235,6 +235,94 @@ test4EF <- function(pool,
 
 
 
+
+## Function to create null communities from a given species pool 
+
+customNetw <- function(simPool,NassA = T,NassB = T,Ja, Jb, intHyp = "NL", funA, funB){
+  # Coalesce communities
+  
+  if(NassA == T){ 
+    sa <- ecolottery::coalesc(J = Ja, m = 0.5,  
+                              pool = simPool$poolA)
+  }
+  if(NassB == T){ 
+    sb <- ecolottery::coalesc(J = Jb, m = 0.5,  
+                              pool = simPool$poolB)
+  }else{ 
+    sa <- ecolottery::coalesc(J = Ja, m = 0.5,  
+                              filt = function(x) 
+                                ifelse(is.na(funA(x)), 0, funA(x)),
+                              pool = simPool$poolA)
+    sb <- ecolottery::coalesc(J = Jb, m = 0.5,  
+                              filt = function(x) 
+                                ifelse(is.na(funB(x)), 0, funB(x)),
+                              pool = simPool$poolB)     
+    
+    
+  }
+  
+  ta <- table(sa$com$ind)/max(table(sa$com$ind))
+  tb <- table(sb$com$ind)/max(table(sb$com$ind))
+  id <- expand.grid(rownames(ta), rownames(tb))
+  int <- expand.grid(ta,tb)
+  
+  int <- data.frame(id, int)
+  int$pint <- int$Var1.1* int$Var2.1
+  names(int) <-c("a", "b", "ra", "rb", "pab")
+  int$traitA <- sa$com$trait[match(int$a, sa$com$ind)]
+  int$traitB <- sb$com$trait[match(int$b, sb$com$ind)]
+  int$spA <- sa$com$sp[match(int$a, sa$com$ind)]
+  int$spB <- sb$com$sp[match(int$b, sb$com$ind)]
+  if(intHyp == "FL"){
+    ## Forbidden links 1-trait <= 0 --> int prob = 0 
+    int$pab <- ifelse(int$traitA-int$traitB >= 0, int$pab * 1, int$pab * 0)
+  } 
+  if(intHyp == "MM") {
+    ## Morphological matching, interaction depends on the frequency of differences between traits 
+    int$pab <- 1- abs(int$traitA-int$traitB)/max(abs(int$traitA-int$traitB))
+    
+  }
+  if(intHyp == "NL"){ 
+    int$pab <- int$pab }
+  return(int)
+  
+  
+  
+  
+}
+
+# function to calculate delta network structures from simulated scenarios 
+deltaNetSt <- function(pool, simulNet, site){
+  # define observed and null netowkrs 
+  obs <- pool[pool$site == site,]
+  ln <- length(unique(obs$intID))
+  print(ln)
+  null  <- simulNet[sample(1:length(simulNet$a), ln, prob = simulNet$pab),]
+  print(null)
+  
+  
+  # create matrix 
+  nullNet <- xtabs(pab ~ spA + spB, null)
+  obsNet <- xtabs(frequency ~ plantCode + animalCode, obs)
+  
+  # normalize probabilities
+  nullNet <- nullNet/max(nullNet)
+  # calculate modularity
+  nulMod <- makeNull(nullNet, 10)
+  obsMod <- makeNull(obsNet, 10)  
+  deltaMod <- abs(obsMod-nulMod)
+  # calculate nestedness 
+  nulNes <- makeNullNes(nullNet, 10)
+  obsNes <- makeNullNes(obsNet, 10)  
+  deltaNes <- abs(obsNes-nulNes)
+  
+  return(c(deltaMod, deltaNes))
+  
+  
+}
+
+
+
 ## Defining process based species pools to evaluate environmental filtering intensity of plant-frugivore networks in the Ecuadorian Andes. 
 
 # In this script a probabilistic species pool will be defined based on environmental + geographic  distance matrices. The environmental matrix will contain environmental multivariate distances calculated in relation of slope, elevation, temperature (mean anual temperature) and precipitation (mean anual precipitation) in the study zone
@@ -318,6 +406,7 @@ EnvVar <- data.frame("Temp" =scores(pcaTemp)[,c(1:2)],
 
 # make a new PCA to reduce dimensionality
 EnvPCA <- vegan::rda(EnvVar)
+dev.off()
 biplot(EnvPCA) # first axis = 59% of variation 
 # extract scores from the first axis
 siteScores <- scores(EnvPCA)$sites[,1]
@@ -360,7 +449,7 @@ ProbPool <- (0.5*(EucDist))+ (0.5*(as.matrix(probMatrix)))
 # Visualize the delination of species pool selection 
 par(oma =c(4,4,2,2))
 heatmap(ProbPool)
-
+dev.off()
 # We can observe the formation of clusters, this means that the pool of species for any site are more likely to come from the observed species in their cluster.
 # (e.g.) Bellavista and Cajanuma are part of the same cluster, hence their pool of species are more similar than for Bellavista and Bombuscaro.  
 
@@ -514,11 +603,12 @@ abline(h=0)
 title("Testing EF in Animals", outer = "T")
 
 
-
-
 ## Probabilistic pools and process strength symmetry. 
 
 ## process strength symmetry direction 
+
+
+
 
 par(mfrow = c(2,2), oma = c(2,2,2,2), mar = c(3,3,3,3))
 # animals over plants 
@@ -602,6 +692,708 @@ plot(PS2/max(PS2),c(1000,1000,2000,2000,3000,3000),
      main = "prob + sd",
      xlab = "Process strength symmetry (diff)")
 abline(v = 0)
+
+
+##### 
+# Network null models
+#####
+
+
+
+## simulate a species pool with uniform distribution of traits 
+
+simPool = CreateSpPool(c(1020, 1270), c(102,127), "uniform")
+
+
+
+## 1) How do we assign relative abundances? do we assume more generalist are also more abundant? 
+## all species have the same relative abundances 
+
+##trait distribution in the simulated pools match the distribution of traits in the metanetwork
+simPool$poolA$trait <- sapply(simPool$poolA$sp, function(x) RLQ$mR$NorS1[x])
+simPool$poolB$trait <- sapply(simPool$poolB$sp, function(x) RLQ$mQ$NorS1[x])
+hist(simPool$poolB$trait)
+
+
+# aproximate probability functions to sample individuals from the pool
+funA <- lapply(unique(dataSet1$N$site), 
+               function(x) approxfun(density(intRQL$RLQpla[intRQL$site == x])))
+names(funA) <- unique(dataSet1$N$site)
+funB <- lapply(unique(dataSet1$N$site), 
+               function(x) approxfun(density(intRQL$RLQan[intRQL$site == x])))
+names(funB) <- unique(dataSet1$N$site)
+
+####################
+#CnRoIn
+####################
+CnRoIn <- c()
+delt_CnRoIn <-c()
+for(j in 1:length(unique(dataSet1$N$site))) { 
+  
+  v <- unique(dataSet1$N$site)
+  
+  CnRoIn[[j]] <- customNetw(simPool, 120,124,
+                            Nass = T, NassB = F,
+                            intHyp = "NL",
+                            funA[[j]], funB[[j]])
+  
+  
+  delt_CnRoIn[[j]] <- deltaNetSt(pool, CnRoIn[[j]], v[j])
+  
+}
+
+names(delt_CnRoIn) <- unique(dataSet1$N$site)
+
+
+res_CnRoIn <- data.frame("mod" = sapply(1:6, function(x) delt_CnRoIn[[x]][1]), 
+                         "nes" = sapply(1:6, function(x) delt_CnRoIn[[x]][2]),
+                         "site" = unique(dataSet1$N$site),
+                         "RQLa" = EFAnimal$RQLa[match(unique(dataSet1$N$site),EFAnimal$site) ],
+                         "RQLp" = EFPlant$RQLp[match(unique(dataSet1$N$site),EFPlant$site) ] )
+
+
+####################
+# CoRoIn
+####################
+CoRoIn <- c()
+delt_CoRoIn <-c()
+for(i in 1:length(unique(dataSet1$N$site))) { 
+  
+  v <- unique(dataSet1$N$site)
+  CoRoIn[[i]] <- customNetw(simPool, 120,124,
+                            Nass = F, NassB = F,
+                            intHyp = "NL",
+                            funA[[i]], funB[[i]])
+  print(v[i])
+  delt_CoRoIn[[i]] <- deltaNetSt(pool, CoRoIn[[i]], v[i])
+  
+}
+
+
+names(pool)
+names(delt_CoRoIn) <- unique(dataSet1$N$site)
+
+
+res_CoRoIn <- data.frame("mod" = sapply(1:6, function(x) delt_CoRoIn[[x]][1]), 
+                         "nes" = sapply(1:6, function(x) delt_CoRoIn[[x]][2]),
+                         "site" = unique(dataSet1$N$site),
+                         "RQLa" = EFAnimal$RQLa[match(unique(dataSet1$N$site),EFAnimal$site) ],
+                         "RQLp" = EFPlant$RQLp[match(unique(dataSet1$N$site),EFPlant$site) ] )
+
+####################
+####################
+#CnRnIn
+####################
+CnRnIn <- c()
+delt_CnRnIn <-c()
+for(i in 1:length(unique(dataSet1$N$site))) { 
+  
+  v <- unique(dataSet1$N$site)
+  CnRnIn[[i]] <- customNetw(simPool, 120,124,
+                            Nass = T, NassB = F,
+                            intHyp = "NL",
+                            funA[[i]], funB[[i]])
+  print(v[i])
+  delt_CnRnIn[[i]] <- deltaNetSt(pool, CnRnIn[[i]], v[i])
+  
+}
+
+
+names(delt_CnRnIn) <- unique(dataSet1$N$site)
+res_CnRnIn <- data.frame("mod" = sapply(1:6, function(x) delt_CnRnIn[[x]][1]), 
+                         "nes" = sapply(1:6, function(x) delt_CnRnIn[[x]][2]),
+                         "site" = unique(dataSet1$N$site),
+                         "RQLa" = EFAnimal$RQLa[match(unique(dataSet1$N$site),EFAnimal$site) ],
+                         "RQLp" = EFPlant$RQLp[match(unique(dataSet1$N$site),EFPlant$site) ] )
+
+####################
+####################
+####################
+#CoRnIn
+####################
+CoRnIn <- c()
+delt_CoRnIn <-c()
+for(i in 1:length(unique(dataSet1$N$site))) { 
+  
+  v <- unique(dataSet1$N$site)
+  CoRnIn[[i]] <- customNetw(simPool, 120,124,
+                            Nass = T, NassB = F,
+                            intHyp = "NL",
+                            funA[[i]], funB[[i]])
+  print(v[i])
+  delt_CoRnIn[[i]] <- deltaNetSt(pool, CoRnIn[[i]], v[i])
+  
+}
+
+
+names(delt_CoRnIn) <- unique(dataSet1$N$site)
+res_CoRnIn <- data.frame("mod" = sapply(1:6, function(x) delt_CoRnIn[[x]][1]), 
+                         "nes" = sapply(1:6, function(x) delt_CoRnIn[[x]][2]),
+                         "site" = unique(dataSet1$N$site),
+                         "RQLa" = EFAnimal$RQLa[match(unique(dataSet1$N$site),EFAnimal$site) ],
+                         "RQLp" = EFPlant$RQLp[match(unique(dataSet1$N$site),EFPlant$site) ] )
+
+####  plot the effect sizes of the null model 
+
+bindEFCaseStudy <- data.frame("CnRnIn" = res_CnRnIn,
+                              "CoRoIn" = res_CoRoIn,
+                              "CnRoIn" = res_CnRoIn,
+                              "CoRnIn" = res_CoRnIn)
+
+bindEFCaseStudy$elev <- EFPlant$elev[match(bindEFCaseStudy$CnRnIn.site, EFPlant$site)]
+bindEFCaseStudy <- bindEFCaseStudy[order(bindEFCaseStudy$elev, decreasing = T),]
+
+### add symetry calculations to effect sizes dataframe
+
+## Process strength symmetry direction 
+
+
+PSdir <- data.frame("PSdir_random_range" = log((myEF2_r_ran_a/myEF_r_ran_p)^2),
+                    "PSdir_random_sd" = log((myEF2_r_sd_a/myEF_r_sd_p)^2),
+                    "PSdir_process_range" = log((myEF2_pro_ran_a/myEF_pro_sd_p)^2),
+                    "PSdir_process_sd" = log((myEF2_pro_sd_a/myEF_pro_sd_p)^2))
+
+
+## Process strength symmetry magnitude 
+
+PSmag <- data.frame(
+  "PSmag_random_range" = log(sqrt((myEF2_r_ran_a-myEF_r_ran_p)^2)+1),
+  "PSmag_random_sd" = log(sqrt((myEF2_r_sd_a-myEF_r_ran_p)^2)+1),
+  "PSmag_proc_range" = log(sqrt((myEF2_pro_ran_a-myEF_pro_ran_p)^2)+1),
+  "PSmag_proc_sd" = log(sqrt((myEF2_pro_sd_a-myEF_pro_sd_p)^2)+1))
+
+
+bindEFCaseStudy <- data.frame(bindEFCaseStudy,
+                              PSdir[bindEFCaseStudy$CoRnIn.site, names(PSdir),],
+                              PSmag[bindEFCaseStudy$CoRnIn.site, names(PSmag),])
+
+
+
+### Test for association of two symmetry components and the null network models 
+
+bindEFCaseStudy <- bindEFCaseStudy[,-c(grep("site",names(bindEFCaseStudy))[-1],
+                    grep("RQLa",names(bindEFCaseStudy))[-1],
+                    grep("RQLp",names(bindEFCaseStudy))[-1])]
+
+
+#####
+##Random_range
+######
+
+## Modularity
+
+NullNet <- grep("mod" ,names(bindEFCaseStudy))
+DeltaModRes_rand_rang <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_range+bindEFCaseStudy$PSmag_random_range))
+names(DeltaModRes_rand_rang ) <- names(bindEFCaseStudy)[NullNet]
+
+## Nestedness
+
+NullNet <- grep("nes" ,names(bindEFCaseStudy))
+DeltaNesRes_rand_rang  <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_range+bindEFCaseStudy$PSmag_random_range))
+names(DeltaModRes_rand_rang ) <- names(bindEFCaseStudy)[NullNet]
+
+######
+## Random_sd
+######
+
+## Modularity
+
+NullNet <- grep("mod" ,names(bindEFCaseStudy))
+DeltaModRes_rand_sd <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_sd+bindEFCaseStudy$PSmag_random_sd))
+names(DeltaModRes_rand_sd) <- names(bindEFCaseStudy)[NullNet]
+
+## Nestedness
+
+NullNet <- grep("nes" ,names(bindEFCaseStudy))
+DeltaNesRes_rand_sd  <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_sd+bindEFCaseStudy$PSmag_random_sd))
+names(DeltaNesRes_rand_sd ) <- names(bindEFCaseStudy)[NullNet]
+
+#######
+### process_range
+#######
+
+## Modularity
+
+NullNet <- grep("mod" ,names(bindEFCaseStudy))
+DeltaModRes_proc_rang <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_range+bindEFCaseStudy$PSmag_proc_range))
+names(DeltaModRes_proc_rang) <- names(bindEFCaseStudy)[NullNet]
+
+## Nestedness
+NullNet <- grep("nes" ,names(bindEFCaseStudy))
+DeltaNesRes_proc_rang  <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_range+bindEFCaseStudy$PSmag_proc_range))
+names(DeltaNesRes_proc_rang) <- names(bindEFCaseStudy)[NullNet]
+
+
+#######
+### process_sd
+#######
+
+## Modularity
+
+NullNet <- grep("mod" ,names(bindEFCaseStudy))
+DeltaModRes_proc_sd <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_sd+bindEFCaseStudy$PSmag_proc_sd))
+names(DeltaModRes_proc_sd) <- names(bindEFCaseStudy)[NullNet]
+
+## Nestedness 
+
+NullNet <- grep("nes" ,names(bindEFCaseStudy))
+DeltaNesRes_proc_sd  <- lapply(NullNet,function(x) lm(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_sd+bindEFCaseStudy$PSmag_proc_sd))
+names(DeltaNesRes_proc_sd ) <- names(bindEFCaseStudy)[NullNet]
+
+
+
+
+##########
+# Visualize results
+
+## symmetry direction
+### 
+pdf("SensitivityPlots.pdf", width = 200, height = 200, pointsize = 300)
+par(mfrow = c(4,4))
+
+######
+NullNet <- grep("CnRoIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_sd,
+                                 main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                 ylab = "SES_n",
+                                 pch = 16,
+                                 xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+#####
+NullNet <- grep("CnRnIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+######
+NullNet <- grep("CoRnIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+
+#########
+NullNet <- grep("CoRoIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_process_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSdir_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSdir"))
+
+#######
+dev.off()
+
+
+# symmetry magnitude
+
+### 
+pdf("SensitivityPlots_mag.pdf", width = 200, height = 200, pointsize = 300)
+par(mfrow = c(4,4))
+
+######
+NullNet <- grep("CnRoIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+#####
+NullNet <- grep("CnRnIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+######
+NullNet <- grep("CoRnIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+
+#########
+NullNet <- grep("CoRoIn" ,names(bindEFCaseStudy))
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_proc_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_Proc_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_sd,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_sd") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+lapply(NullNet[1:2], function(x) plot(bindEFCaseStudy[,x]~bindEFCaseStudy$PSmag_random_range,
+                                      main = paste0(names(bindEFCaseStudy)[x],"_random_rang") ,
+                                      ylab = "SES_n",
+                                      pch = 16,
+                                      xlab = "PSSmag"))
+
+#######
+
+
+dev.off()
+
+##########
+# Visualize tables
+## random_range
+
+lapply(DeltaModRes_rand_sd, function(x) knitr::kable(anova(x)))
+lapply(DeltaNesRes_rand_sd, function(x) knitr::kable(anova(x)))
+
+
+## random_sd
+
+lapply(DeltaModRes_rand_sd, function(x) knitr::kable(anova(x)))
+lapply(DeltaNesRes_rand_sd, function(x) knitr::kable(anova(x)))
+
+## proc_range
+
+lapply(DeltaModRes_proc_rang, function(x) knitr::kable(anova(x)))
+lapply(DeltaNesRes_proc_rang, function(x) knitr::kable(anova(x)))
+
+## proc_sd
+
+lapply(DeltaModRes_proc_sd, function(x) knitr::kable(anova(x)))
+lapply(DeltaNesRes_proc_sd, function(x) knitr::kable(anova(x)))
+
+
+
+
+
+
+
+
+
+
+##########
+png("Figs/nullModels.png", height = 2000, width = 2000, pointsize = 40)
+par(mfrow = c(2,2))
+##### 
+#Null model = CnRnIn
+## make the main plot (with modularity SES)
+plot(bindEFCaseStudy$CnRnIn.mod~bindEFCaseStudy$PSdir_random_range,
+     frame = F,
+     ylim = c(0,20),
+    xlim = c(-10, 10),
+     main = expression(paste("Null model = ", "C"[null], "R"[null], "I"[null])),
+     xlab = "Process strength symmetry",
+     ylab = "SES Network structure",
+     pch = 16,
+     cex = 2,
+     col = "grey")
+## add Nestedness SES
+points(bindEFCaseStudy$CnRnIn.nes~bindEFCaseStudy$PSdir_random_range,
+       cex = 2, col = "grey", pch = 15)
+## add border around points 
+points(bindEFCaseStudy$CnRnIn.nes~bindEFCaseStudy$PSdir_random_range,
+       cex = 2, col = "black", pch = 0)
+points(bindEFCaseStudy$CnRnIn.mod~bindEFCaseStudy$PSdir_random_range, 
+       cex = 2, col = "black", pch = 1)
+
+## add regression lines
+plotrix::ablineclip(lm(bindEFCaseStudy$CnRnIn.mod~bindEFCaseStudy$PSdir_random_range), 
+                    x1 = -3, x2=10, col = "black", lwd = 2)
+plotrix::ablineclip(lm(bindEFCaseStudy$CnRnIn.nes~bindEFCaseStudy$PSdir_random_range), 
+                    x1 = -3, x2=10, col = "black", lwd = 2, lty = 2)
+
+## add legend 
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(16,15), 
+       col = "gray")
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(1,0), 
+       col = "black")
+##############
+##### 
+#Null model = CoRoIn
+## make the main plot (with modularity SES)
+plot(bindEFCaseStudy$AoBoIn.mod~log(sim),
+     frame = F,
+     ylim = c(0,15),
+     xlim = c(1, 2),
+     main = expression(paste("Null model = ", "C"[obs], "R"[obs], "I"[null])),
+     xlab = "Process strength symmetry",
+     ylab = "SES Network structure",
+     pch = 16,
+     cex = 2,
+     col = "grey")
+## add Nestedness SES
+points(bindEFCaseStudy$AoBoIn.nes~log(sim), 
+       cex = 2, col = "grey", pch = 15)
+## add border around points 
+points(bindEFCaseStudy$AoBoIn.nes~log(sim), 
+       cex = 2, col = "black", pch = 0)
+points(bindEFCaseStudy$AoBoIn.mod~log(sim), 
+       cex = 2, col = "black", pch = 1)
+## add regression lines
+plotrix::ablineclip(lm(bindEFCaseStudy$AoBoIn.mod~log(sim)), x1 = 1, x2=2, col = "black", lwd = 2)
+plotrix::ablineclip(lm(bindEFCaseStudy$AoBoIn.nes~log(sim)), x1 = 1, x2=2, col = "black", lwd = 2,lty = 1)
+## add legend 
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(16,15), 
+       col = "gray")
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(1,0), 
+       col = "black")
+
+##############
+##### 
+#Null model = CnRoIn
+###### 
+#make the main plot (with modularity SES)
+plot(bindEFCaseStudy$AnBoIn.mod~log(sim),
+     frame = F,
+     ylim = c(0,15),
+     xlim = c(1, 2),
+     main = expression(paste("Null model = ", "C"[null], "R"[obs], "I"[null])),
+     xlab = "Process strength symmetry",
+     ylab = "SES Network structure",
+     pch = 16,
+     cex = 2,
+     col = "grey")
+## add Nestedness SES
+points(bindEFCaseStudy$AnBoIn.nes~log(sim), 
+       cex = 2, col = "grey", pch = 15)
+## add border around points 
+points(bindEFCaseStudy$AnBoIn.nes~log(sim), 
+       cex = 2, col = "black", pch = 0)
+points(bindEFCaseStudy$AnBoIn.mod~log(sim), 
+       cex = 2, col = "black", pch = 1)
+## add regression lines
+plotrix::ablineclip(lm(bindEFCaseStudy$AnBoIn.mod~log(sim)), x1 = 1, x2=2, col = "black", lwd = 2)
+plotrix::ablineclip(lm(bindEFCaseStudy$AnBoIn.nes~log(sim)), x1 = 1, x2=2, col = "black", lwd = 2, lty = 2)
+## add legend 
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(16,15), 
+       col = "gray")
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(1,0), 
+       col = "black")
+##############
+##### 
+#Null model = CoRnIn
+## make the main plot (with modularity SES)
+plot(bindEFCaseStudy$AoBnIn.mod~log(sim),
+     frame = F,
+     ylim = c(0,15),
+     xlim = c(1, 2),
+     main = expression(paste("Null model = ", "C"[obs], "R"[null], "I"[null])),
+     xlab = "Process strength symmetry",
+     ylab = "SES Network structure",
+     pch = 16,
+     cex = 2,
+     col = "grey")
+## add Nestedness SES
+points(bindEFCaseStudy$AoBnIn.nes~log(sim), 
+       cex = 2, col = "grey", pch = 15)
+## add border around points 
+points(bindEFCaseStudy$AoBnIn.nes~log(sim), 
+       cex = 2, col = "black", pch = 0)
+points(bindEFCaseStudy$AoBnIn.mod~log(sim), 
+       cex = 2, col = "black", pch = 1)
+## add regression lines
+plotrix::ablineclip(lm(bindEFCaseStudy$AoBnIn.mod~log(sim)), x1 = 1, x2=2, col = "black", lwd = 2)
+plotrix::ablineclip(lm(bindEFCaseStudy$AoBnIn.nes~log(sim)), x1 = 1, x2=2, col = "black",lwd = 2,  lty = 2)
+## add legend 
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(16,15), 
+       col = "gray")
+legend("topleft", bty = "n", 
+       legend = c("Modularity", "Nestedness"), 
+       pch = c(1,0), 
+       col = "black")
+
+##############
+dev.off()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BEFMod <- abs(bindEFCaseStudy$AnBnIn.mod - bindEFCaseStudy$AnBoIn.mod)
+AEFMod <- abs(bindEFCaseStudy$AnBnIn.mod - bindEFCaseStudy$AoBnIn.mod)
+ABEFMod <- abs(bindEFCaseStudy$AnBnIn.mod - bindEFCaseStudy$AoBoIn.mod)
+
+
+
+ModRes <- data.frame(BEFMod,AEFMod,ABEFMod, 
+                     "site" = res_AoBnIn$site,
+                     "RQLa" = res_AoBnIn$RQLa,
+                     "RQLp" = res_AoBnIn$RQLp)
+ModRes$elev <- EFPlant$elev[match(ModRes$site, EFPlant$site)]
+ModRes <-ModRes[order(ModRes$elev, decreasing = T),]
+
+
+ModPlot <- t(ModRes[1:6,1:3])
+colnames(ModPlot) <- ModRes$elev
+
+
+## 1) Quantify meta-network structure and the variation in network structure when subsetting for the same number of interactions/plants/birds
+
+# meta network object
+metaNetEl <- xtabs(frequency~plantCode + animalCode, dataSet1$N)
+# regional network object
+metaNetEl1 <- xtabs(frequency~plantCode + animalCode  + elevation, dataSet1$N)
+# observed network object 
+metaNetEl2 <- xtabs(frequency~plantCode + animalCode + elevation + site, dataSet1$N)
+
 
 
 
