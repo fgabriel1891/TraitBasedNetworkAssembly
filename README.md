@@ -34,6 +34,6 @@ Code to replicate the analyses and figures shown in:
 
 Comments, bugs, and/or suggestions please open an issue [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
 
-# Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
+#### Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
 
 
