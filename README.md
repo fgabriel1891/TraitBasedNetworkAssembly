@@ -17,9 +17,13 @@ Code to replicate the analyses and figures shown in:
 -----------
 
 
+Comments, bugs, and/or suggestions please open an issue [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
 
+#### Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
 
-      |TraitBasedNetworks
+## Repository Index:
+
+      |TraitBasedAssembly
           |Readme
           |Scripts
             |-CustomFunctions.R ## Customized functions to needed to run 
@@ -30,10 +34,5 @@ Code to replicate the analyses and figures shown in:
           |TempPlots
           
     
-
-
-Comments, bugs, and/or suggestions please open an issue [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
-
-#### Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
 
 
