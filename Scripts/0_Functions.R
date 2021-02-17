@@ -110,8 +110,6 @@ RunSimul <- function(Pool,
                                             TraitB = Scenario[x,]$TraitB,
                                             mA = Scenario[x,]$mA,
                                             mB = Scenario[x,]$mB,
-                                            chunkA = Scenario[x,]$chunkA,
-                                            chunkB = Scenario[x,]$chunkB,
                                             JA = Scenario[x,]$JA,
                                             JB = Scenario[x,]$JB,
                                             EF.A = Scenario[x,]$EA,
@@ -139,8 +137,6 @@ RunSimul <- function(Pool,
                                           TraitB = Scenario[x,]$TraitB,
                                           mA = Scenario[x,]$mA,
                                           mB = Scenario[x,]$mB,
-                                          chunkA = Scenario[x,]$chunkA,
-                                          chunkB = Scenario[x,]$chunkB,
                                           JA = Scenario[x,]$JA,
                                           JB = Scenario[x,]$JB,
                                           EF.A = Scenario[x,]$EA,
@@ -279,6 +275,7 @@ SimulateSelCom  <- function(Trait,
   if (EF == "SEF") { 
     
     sigma <- sigma
+    filt_gaussian <- function(t,x) exp(-(x-t)^2/(2*sigma^2))
     
     comA <- coalesc(J, 
                     m, 
@@ -325,7 +322,6 @@ SimulateSelCom  <- function(Trait,
 #'  Function to filter a distribution based on a gaussian distribution with sd=sigma
 #' to be called within SimulateSelCom
 
-filt_gaussian <- function(t,x) exp(-(x-t)^2/(2*sigma^2))
 
 #' createMetaMatrix:
 #' 
@@ -745,6 +741,82 @@ sortMATRIX <- function(MATRIX,binary,sortvar) {
               index_cols=index_cols))
   
 }
+
+
+ 
+#' Plot_ConvexHull
+#' 
+#' Plot a covex hull from a list of given vectors 
+
+
+Plot_ConvexHull<-function(xcoord, ycoord, lcolor, lwd , lty){
+  hpts <- chull(x = xcoord, y = ycoord)
+  hpts <- c(hpts, hpts[1])
+  lines(xcoord[hpts], 
+        ycoord[hpts],
+        col = lcolor, 
+        lwd = lwd,
+        lty = lty)
+}  
+
+
+#' con_res_efz:
+#' 
+#'  a function to calculate effect sizes
+#' 
+con_res_efz <- function(RES_butd, RES1, filt, int, ab = c("a","b")){
+  
+  if(ab == "a"){
+    
+    n_xdif <- RES_butd$NODFx[RES_butd$sigmaA == filt & RES_butd$intHyp == int]-RES1$NODFx[RES1$sigmaA == filt & RES1$intHyp == int]
+    n_sd_pool <- sqrt(RES_butd$NODFsd[RES_butd$sigmaA == filt & RES_butd$intHyp == int]^2+RES1$NODFsd[RES1$sigmaA == filt & RES1$intHyp == int]^2)
+    n_efz <- n_xdif/n_sd_pool
+    
+    q_xdif <- RES_butd$QZscorex[RES_butd$sigmaA == filt & RES_butd$intHyp == int]-RES1$QZscorex[RES1$sigmaA == filt & RES1$intHyp == int]
+    q_sd_pool <- sqrt(RES_butd$QZscoresd[RES_butd$sigmaA == filt & RES_butd$intHyp == int]^2+RES1$QZscoresd[RES1$sigmaA == filt & RES1$intHyp == int]^2)
+    q_efz <- q_xdif/q_sd_pool
+    pss <- RES1$PSSdir[RES1$sigmaA == filt & RES1$intHyp == int]
+    
+    psm <- RES1$PSSmag[RES1$sigmaA == filt & RES1$intHyp == int]
+    
+  }
+  
+  
+  if(ab == "b"){
+    n_xdif <- RES_butd$NODFx[RES_butd$sigmaB == filt & RES_butd$intHyp == int]-RES1$NODFx[RES1$sigmaB == filt & RES1$intHyp == int]
+    n_sd_pool <- sqrt(RES_butd$NODFsd[RES_butd$sigmaB == filt & RES_butd$intHyp == int]^2+RES1$NODFsd[RES1$sigmaB == filt & RES1$intHyp == int]^2)
+    n_efz <- n_xdif/n_sd_pool
+    
+    
+    q_xdif <- RES_butd$QZscorex[RES_butd$sigmaB == filt & RES_butd$intHyp == int]-RES1$QZscorex[RES1$sigmaB == filt & RES1$intHyp == int]
+    q_sd_pool<- sqrt(RES_butd$QZscoresd[RES_butd$sigmaB == filt & RES_butd$intHyp == int]^2+RES1$QZscoresd[RES1$sigmaB == filt & RES1$intHyp == int]^2)
+    q_efz <- q_xdif/q_sd_pool
+    pss <- RES1$PSSdir[RES1$sigmaB == filt & RES1$intHyp == int]
+    psm <- RES1$PSSmag[RES1$sigmaB == filt & RES1$intHyp == int]
+  }
+  
+  
+  return(data.frame(n_efz,q_efz,pss, psm))
+  
+  
+}
+
+#' toplot:
+#' 
+#' Function to arrange the data.frame to plot
+#' 
+toplot <- function(cr_nl_a){
+  toplot <- data.frame("nodf" = c(cr_nl_a[,1]$n_efz,cr_nl_a[,2]$n_efz,cr_nl_a[,3]$n_efz,cr_nl_a[,4]$n_efz,cr_nl_a[,5]$n_efz),
+                       "q"= c(cr_nl_a[,1]$q_efz,cr_nl_a[,2]$q_efz,cr_nl_a[,3]$q_efz,cr_nl_a[,4]$q_efz,cr_nl_a[,5]$q_efz),
+                       "size1" = c(1-sapply(seq(0.1,1,0.2),function(x)rep(x,5))),
+                       "size2" = rep(1-seq(0.1,1,0.2),5),
+                       "pss" = c(cr_nl_a[,1]$pss,cr_nl_a[,2]$pss,cr_nl_a[,3]$pss,cr_nl_a[,4]$pss,cr_nl_a[,5]$pss),
+                       "psm" = c(cr_nl_a[,1]$psm,cr_nl_a[,2]$psm,cr_nl_a[,3]$psm,cr_nl_a[,4]$psm,cr_nl_a[,5]$psm)
+  )
+  return(toplot)
+  
+}
+
 
 
 
