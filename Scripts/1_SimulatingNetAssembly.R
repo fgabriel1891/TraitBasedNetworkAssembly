@@ -16,13 +16,19 @@
 #####
 
 ## Load custom functions (important!)
-source("scripts/CustomFunctions.R") # path might change 
+source("Scripts/0_Functions.R") # path might change 
 
 ###############
 ## Section 4: SIMULATING NETWORK ASSEMBLY
 ###############
-## dependencies 
-#####
+## Load libraries 
+
+library(ecolottery)
+library(vegan)
+library(bipartite)
+library(tidyverse)
+library(MASS)
+library(corrplot)
 library(foreach) # apply functions sequencially 
 library(MASS) # stats
 library(vegan) # eco stats 
@@ -112,7 +118,7 @@ PossNETall <- rbind(PossNET, PossNET2)
 
 ## 2.1) Create species pool 
 ss <- CreateSpPool(Jpool = c(5000, 5000),
-                    J = c(500,500), 
+                   J = c(500,500), 
                    poolShape = "uniform")
 
 ## hard save the species pool object.
@@ -126,13 +132,21 @@ cpus <- 80
 
 ## Start parallelization (Make sure the snowfall library has been loaded)
 library(snowfall)
+
 sfInit(parallel=TRUE, cpus=cpus, type="SOCK")  # start cluster 
-sfSource("scripts/CustomFunctions.R") # Source functions to the cluster
+sfSource("Scripts/0_Functions.R") # Source functions to the cluster
 # Export the scenario object(s) to the cluster (i.e. objects created in step 1)
 sfExport("ss")
-# Fixed trait optima
-sfExport("Poss")
 sfExport("PossNETall")
+
+# Send packages to cluster 
+
+sfLibrary(ecolottery)
+sfLibrary(vegan)
+sfLibrary(bipartite)
+sfLibrary(tidyverse)
+sfLibrary(MASS)
+sfLibrary(corrplot)
 
 ### Running the simulations (time consuming step)
 
@@ -156,8 +170,8 @@ simul_0 <- RunSimul(Pool = ss,# species pool
                     runParal = T) # Will it run in parallel?  (Strongly recomended)
 
 #### Hard save the object  (To ensure replicability)
-# saveRDS(simulx, "EF_NL_simul_fixAug.rds")
-# saveRDS(simul_0, "BUTD_ef.rds.")
+# saveRDS(simulx, "simulx.rds")
+# saveRDS(simul_0, "simul_0.rds.")
 # (End of simulations)
 
 #### End cluster
@@ -203,10 +217,32 @@ RES_DD_2$PSSdir <- RES_DD_2$PSSdir /max(RES_DD_2$PSSdir, na.rm = T)
 RES_DD_2$PSSmag <- RES_DD_2$PSSmag /max(RES_DD_2$PSSmag, na.rm = T)
 
 #########
+## Step 4) Variance partitioning 
+#########
+
+RES_DD$ass <- log(RES_DD$sigmaA/RES_DD$sigmaB)
+
+lmm <- lme4::lmer(QZscorex~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
+lmm2 <- lme4::lmer(NODFx~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
+
+lmm3 <- lme4::lmer(QZscoresd~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
+lmm4 <- lme4::lmer(NODFsd~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
+
+
+
+slopes <- c(lme4::fixef(lmm)["ass"]+lme4::ranef(lmm)$intHyp$ass, lme4::fixef(lmm2)["ass"]+lme4::ranef(lmm2)$intHyp$ass)
+slopes2 <- c(lme4::fixef(lmm3)["ass"]+lme4::ranef(lmm3)$intHyp$ass, lme4::fixef(lmm4)["ass"]+lme4::ranef(lmm4)$intHyp$ass)
+
+
+
+
+
+
+
 
 
 ############################################################
-## Step 4) Calculate Bottom-Up and Top-Down effects  
+## Step 5) Calculate Bottom-Up and Top-Down effects  
 ############################################################
 
 cr_nl_a <- sapply(seq(0.1,1, 0.2), function(x) con_res_efz(RES_DD_2, RES_DD, x, "NL","a"))
@@ -218,7 +254,15 @@ cr_nl_b <- sapply(seq(0.1,1, 0.2), function(x) con_res_efz(RES_DD_2, RES_DD, x, 
 cr_fl_b <- sapply(seq(0.1,1, 0.2), function(x) con_res_efz(RES_DD_2, RES_DD, x, "FL", "b"))
 cr_mm_b <- sapply(seq(0.1,1, 0.2), function(x) con_res_efz(RES_DD_2, RES_DD, x, "MM","b"))
 
+## Rearrange dataframe 
 
+plot_nl_a <- toplot(cr_nl_a)
+plot_fl_a <- toplot(cr_fl_a)
+plot_mm_a <- toplot(cr_mm_a)
+
+plot_nl_b <- toplot(cr_nl_b)
+plot_fl_b <- toplot(cr_fl_b)
+plot_mm_b <- toplot(cr_mm_b)
 
 
 
@@ -237,34 +281,36 @@ cr_mm_b <- sapply(seq(0.1,1, 0.2), function(x) con_res_efz(RES_DD_2, RES_DD, x, 
 #####
 #######
 dev.off()
-par(mar=c(6,6,4,4), las = 1)
+par( mfrow = c(1,2),mar=c(6,6,4,4), las = 1)
 plot(NODFx~QZscorex,
      frame = F,
-     xlim = c(-50, 200),
-     ylim = c(-50,200),
-     pch = ifelse( RES_DD$intHyp == "NL", 16, 
-                   ifelse( RES_DD$intHyp == "FL", 15, 17)),
-     col = "grey90",
-     ylab = "", 
-     xlab = "", 
+     xlim = c(0, 150),
+     ylim = c(0,250),
+     pch = ifelse( RES_DD$intHyp == "NL", 1, 
+                   ifelse( RES_DD$intHyp == "FL", 0,
+                           2)),
+     col = ifelse( RES_DD$intHyp == "NL", "#FADE43", 
+                   ifelse( RES_DD$intHyp == "FL", "#E0A738",
+                           "#9C413D")),
+     xlab = "Modularity (Q-Zscore)", 
+     ylab = "Nestedness (NODF-Zscore)", 
+     cex.lab = 1.5,
      cex.axis = 1,
      cex = 1, 
-     data = RES_DD)
+     data = RES_DD[!RES_DD$EA == "ND",])
+
+
 Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")],
                  RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")], 
-                 scales::alpha("gray",0.5))
+                 scales::alpha("#FADE43",0.5), lwd = 3, lty = 2)
 
 Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM")],
                  RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM")], 
-                 scales::alpha("gray",1))
+                 scales::alpha("#9C413D",1), lwd = 3, lty = 2)
 
 Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")],
-                 RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")], 
-                 scales::alpha("gray",0.5))
-points(NODFx~QZscorex,data = RES_DD, col = "grey60", cex=  1,
-       pch = ifelse( RES_DD$intHyp == "NL", 1, 
-                     ifelse( RES_DD$intHyp == "FL", 0, 2)))
-
+                 RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")], lcolor = 
+                scales::alpha("#E0A738",0.5), lwd = 3, lty = 2)
 
 #### 
 # neutral arrows
@@ -275,7 +321,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx,
-         lwd = 2, lty = 1, col = scales::alpha("black",0.9))
+         lwd = 2, lty = 1, col = scales::alpha("#FADE43",0.9))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("NL"),]$NODFsd,
@@ -283,7 +329,7 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("NL"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$QZscorex, 
-         lwd = 2, lty = 1,col = scales::alpha("black",0.9))
+         lwd = 2, lty = 1,col = scales::alpha("#FADE43",0.9))
 
 segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscorex
          -RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscoresd,
@@ -291,7 +337,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx,
-         lwd = 2, lty = 1, col = scales::alpha("black",0.9))
+         lwd = 2, lty = 1, col = scales::alpha("#9C413D",0.9))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("MM"),]$NODFsd,
@@ -299,7 +345,7 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("MM"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$QZscorex, 
-         lwd = 2, lty = 1,col = scales::alpha("black",0.9))
+         lwd = 2, lty = 1,col = scales::alpha("#9C413D",0.9))
 
 segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscorex
          -RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscoresd,
@@ -307,7 +353,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx,
-         lwd = 2, lty = 1, col = scales::alpha("black",0.9))
+         lwd = 2, lty = 1, col = scales::alpha("#E0A738",0.9))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("FL"),]$NODFsd,
@@ -315,117 +361,133 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("FL"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$QZscorex, 
-         lwd = 2, lty = 1,col = scales::alpha("black",0.9))
-abline(h=0, lty = 2)
-abline(v=0, lty = 2)
+         lwd = 2, lty = 1,col = scales::alpha("#E0A738",0.9))
 ###################
+
+
+legend("topleft", 
+       title = "Interaction assembly",
+       legend = c("Morphological matching", 
+                  "Forbidden links",
+                  "Stochastic interactions"),
+       pch = c(2,0,1), cex = 0.7,
+       col = c("#9C413D","#E0A738","#FADE43"))
+
+legend("bottomleft", 
+       title = "Community assembly",
+       legend = c("Environmental filtering", 
+                  "Neutral assembly"),
+       lty = c(2,1),cex = 0.7,
+       col = c("gray80","black"))
+
+
+
+
+
+
+
+
+
+
+
+barplot(slopes[c(1,4,2,5,3,6)],
+        ylim = c(-5,15), 
+        col = c("#FADE43","#FADE43","#E0A738",
+                "#E0A738","#9C413D","#9C413D"),
+        ylab = "ß Process strength assymetry", 
+        cex.lab = 1.5)
+legend("topright", 
+       legend = c("Morphological matching",
+                  "Forbidden links",
+                  "Stochastic interactions"),
+       cex = 0.7,
+       fill = c("#FADE43","#E0A738","#9C413D"))
+
+#################
+
+
+
+
+barplot(slopes2[c(1,4,2,5,3,6)],
+        ylim = c(0,1), 
+        col = c("#FADE43","#FADE43","#E0A738","#E0A738","#9C413D","#9C413D"))
+
+
+
+
+
 
 
 
 #######
-# Figure 3b: Bottom-up and Top-down effects of resource and community assembly processes. 
+# Figure 3: Bottom-up and Top-down effects of resource and community assembly processes. 
 ########
 
 
+plot(log(abs(plot_nl_a$nodf)/abs(plot_nl_b$nodf))~
+       log(plot_nl_a$size1/plot_nl_b$size2),
+     xlim = c(-3,3),
+     xlab = "Process strenght assymetry", 
+     ylab = "Effect size log-ratio \n (SES consumer/SES resource)",
+     col = "#FADE43",
+     ylim = c(-3,3))
+abline(h = 0, v = 0, lty = 2)
+abline(lm(log(abs(plot_nl_a$nodf)/abs(plot_nl_b$nodf))~
+            log(plot_nl_a$size1/plot_nl_b$size2)),
+       col = "#FADE43")
 
-plot_nl_a <- toplot(cr_nl_a)
-plot_fl_a <- toplot(cr_fl_a)
-plot_mm_a <- toplot(cr_mm_a)
+points(log(abs(plot_fl_a$nodf)/abs(plot_fl_b$nodf))~
+       log(plot_fl_a$size1/plot_fl_b$size2), 
+       pch = 2, col = "#E0A738")
 
-plot_nl_b <- toplot(cr_nl_b)
-plot_fl_b <- toplot(cr_fl_b)
-plot_mm_b <- toplot(cr_mm_b)
+abline(lm(log(abs(plot_fl_a$nodf)/abs(plot_fl_b$nodf))~
+            log(plot_fl_a$size1/plot_fl_b$size2)),
+       col =  "#E0A738")
 
+points(log(abs(plot_mm_a$nodf)/abs(plot_mm_b$nodf))~
+       log(plot_mm_a$size1/plot_mm_b$size2), 
+       pch = 1, col = "#9C413D")
 
-newplot_fl <- rbind(plot_fl_b,plot_fl_a)
-newplot_mm <- rbind(plot_mm_b,plot_mm_a)
-newplot_nl <- rbind(plot_nl_b,plot_nl_a)
-
-dev.off()
-par(mfrow = c(2,3), mar = c(1,1,1,1))
-plot(abs(plot_nl_b$nodf)~
-       abs(plot_nl_a$nodf),
-     cex =abs((plot_nl_a$pss)*3),
-     xaxt = "n", yaxt = "n",
-     pch = 16, 
-     col = ifelse(abs(plot_nl_b$nodf)/abs(plot_nl_a$nodf)>1,scales::alpha("mediumblue", 0.7),scales::alpha("firebrick", 0.7)),
-     xlim = c(0,3), ylim = c(0,3) )
-points(abs(plot_nl_b$nodf)~
-         abs(plot_nl_a$nodf),
-       cex =abs((plot_mm_a$pss)*3),
-       pch = 1, col = scales::alpha("black", 0.7))
-
-abline(a=  0,b = 1, lty  = 2)
-plot(abs(plot_fl_b$nodf)~
-       abs(plot_fl_a$nodf),
-     cex =abs((plot_nl_a$pss)*3),
-     pch = 15, 
-     col = ifelse(abs(plot_fl_b$nodf)/abs(plot_fl_a$nodf)>1,scales::alpha("mediumblue", 0.7),scales::alpha("firebrick", 0.7)),
-     xaxt = "n", yaxt = "n",
-     xlab = "", ylab = "",
-     xlim = c(0,2.5), ylim = c(0,2.5) )
-points(abs(plot_fl_b$nodf)~
-         abs(plot_fl_a$nodf),
-       cex =abs((plot_nl_a$pss)*3),
-       pch = 0, col = scales::alpha("black", 0.7))
-abline(a=  0,b = 1, lty  = 2)
-
-plot(abs(plot_mm_b$nodf)~
-       abs(plot_mm_a$nodf),
-     cex =abs((plot_mm_a$pss)*3),
-     xaxt = "n", yaxt = "n",
-     pch = 17,
-     col = ifelse(abs(plot_mm_b$nodf)/abs(plot_mm_a$nodf)>1,scales::alpha("mediumblue", 0.7),scales::alpha("firebrick", 0.7)),
-     xlim = c(0,3), ylim = c(0,3) )
-points(abs(plot_mm_b$nodf)~
-         abs(plot_mm_a$nodf),
-       cex =abs((plot_mm_a$pss)*3),
-       pch = 2, col = scales::alpha("black", 0.7))
-abline(a=  0,b = 1, lty  = 2)
+abline(lm(log(abs(plot_mm_a$nodf)/abs(plot_mm_b$nodf))~
+            log(plot_mm_a$size1/plot_mm_b$size2)),
+       pch = 1,  col = "#9C413D")
 
 
+###
+
+plot(log(abs(plot_nl_a$q)/abs(plot_nl_b$q))~
+       log(plot_nl_a$size1/plot_nl_b$size2),
+     xlim = c(-3,3),
+     col = "#FADE43",
+     xlab = "Process strenght assymetry", 
+     ylab = "Effect size log-ratio \n (SES consumer/SES resource)",
+     ylim = c(-3,3))
+abline(h = 0, v = 0, lty = 2)
+abline(lm(log(abs(plot_nl_a$q)/abs(plot_nl_b$q))~
+            log(plot_nl_a$size1/plot_nl_b$size2)),
+       col = "#FADE43")
+
+points(log(abs(plot_fl_a$q)/abs(plot_fl_b$q))~
+         log(plot_fl_a$size1/plot_fl_b$size2), 
+       pch = 2, col = "#E0A738")
+
+abline(lm(log(abs(plot_fl_a$q)/abs(plot_fl_b$q))~
+            log(plot_fl_a$size1/plot_fl_b$size2)),
+       col =  "#E0A738")
+
+points(log(abs(plot_mm_a$q)/abs(plot_mm_b$q))~
+         log(plot_mm_a$size1/plot_mm_b$size2), 
+       pch = 1, col = "#9C413D")
+
+abline(lm(log(abs(plot_mm_a$q)/abs(plot_mm_b$q))~
+            log(plot_mm_a$size1/plot_mm_b$size2)),
+       pch = 1,  col = "#9C413D")
 
 
-plot(abs(plot_nl_b$q)~
-       abs(plot_nl_a$q),
-     cex =abs((plot_nl_a$pss)*3),
-     xaxt = "n", yaxt = "n",
-     pch = 16, 
-     col = ifelse(abs(plot_nl_b$q)/abs(plot_nl_a$q)>1,scales::alpha("mediumblue", 0.7),scales::alpha("firebrick", 0.7)),
-     xlim = c(0,3), ylim = c(0,3) )
-points(abs(plot_nl_b$q)~
-         abs(plot_nl_a$q),
-       cex =abs((plot_nl_a$pss)*3),
-       pch = 1, col = scales::alpha("black", 0.7))
-abline(a=  0,b = 1, lty  = 2)
 
 
-plot(abs(plot_fl_b$q)~
-       abs(plot_fl_a$q), 
-     cex =abs((plot_nl_a$pss)*3),
-     pch = 15, 
-     col = ifelse(abs(plot_fl_b$q)/abs(plot_fl_a$q)>1,scales::alpha("mediumblue", 0.7),scales::alpha("firebrick", 0.7)),
-     xlab = "", ylab = "",
-     xaxt = "n", yaxt = "n",
-     xlim = c(0,3), ylim = c(0,3) )
-points(abs(plot_fl_b$q)~
-         abs(plot_fl_a$q),
-       cex =abs((plot_mm_a$pss)*3),
-       pch = 0, col = scales::alpha("black", 0.7))
-abline(a=  0,b = 1, lty  = 2)
 
-plot(log1p(abs(plot_mm_b$q))~
-       log1p(abs(plot_mm_a$q)),
-     cex =abs((plot_nl_a$pss)*3),
-     xaxt = "n", yaxt = "n",
-     pch = 17, 
-     col = ifelse(abs(plot_mm_b$q)/abs(plot_mm_a$q)>1,scales::alpha("mediumblue", 0.7),scales::alpha("firebrick", 0.7)),
-     xlim = c(0,3), ylim = c(0,3) )
-abline(a=  0,b = 1, lty  = 2)
-points(log1p(abs(plot_mm_b$q))~
-         log1p(abs(plot_mm_a$q)),
-       cex =abs((plot_nl_a$pss)*3),
-       pch = 2, col = scales::alpha("black", 0.7))
+
 
 
 
