@@ -1,5 +1,8 @@
 
 
+[![DOI](https://zenodo.org/badge/232598249.svg)](https://zenodo.org/badge/latestdoi/232598249)
+
+
 Code to replicate the analyses and figures shown in:
 # Trait-based inference of ecological network assembly
 ## Emma-Liina Marjakangas 1,2,\*, Gabriel Muñoz 3 \*, Shaun Turney 3 \*, Jörg Albrecht4, Eike Lena Neuschulz4, Matthias Schleuning4, Jean-Philippe Lessard3
@@ -20,19 +23,3 @@ Code to replicate the analyses and figures shown in:
 Comments, bugs, and/or suggestions please open an issue [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
 
 #### Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
-
-## Repository Index:
-
-      |TraitBasedAssembly
-          |Readme
-          |Scripts
-            |-CustomFunctions.R ## Customized functions to needed to run 
-            |-CondensedSimulScript.R ## Simulation workflow
-            |-Case_study.R # Case Study workflow 
-            |-PlotTraitDistNet.R # Plot "sexy" trait networks
-            |-RQL_ANDES.R # Matching trait analysis for the Ecuador Andes networks
-          |TempPlots
-          
-    
-
-
