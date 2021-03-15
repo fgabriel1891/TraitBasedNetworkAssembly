@@ -31,9 +31,10 @@ library(MASS)
 library(corrplot)
 library(foreach) # apply functions sequencially 
 library(MASS) # stats
-library(vegan) # eco stats 
 library(yhat) # variance partitioning 
-
+library(lme4)
+library(sjPlot)
+# library(magick) # to export figures 
 ############################################################
 ## Step 1) define paramter objects and create combinations of assembly scenarios to simulate
 ############################################################
@@ -170,8 +171,8 @@ simul_0 <- RunSimul(Pool = ss,# species pool
                     runParal = T) # Will it run in parallel?  (Strongly recomended)
 
 #### Hard save the object  (To ensure replicability)
-# saveRDS(simulx, "simulx.rds")
-# saveRDS(simul_0, "simul_0.rds.")
+#saveRDS(simulx, "simulx.rds")
+#saveRDS(simul_0, "simul_0.rds.")
 # (End of simulations)
 
 #### End cluster
@@ -206,39 +207,8 @@ RES_DD_2$con_x <- apply(sapply(1:3,function(y) sapply(1:30, function(x)simul_0[[
 RES_DD_2$con_sd <- apply(sapply(1:3,function(y) sapply(1:30, function(x)simul_0[[x]][,y]$metrics[[5]]$metrics$con)), 1, FUN = sd)
 
 ## calculate process strength symmetry and add it as a variable 
-RES_DD$PSSdir <- log((RES_DD$sigmaA/RES_DD$sigmaB)^2)
-RES_DD$PSSmag <- log(sqrt((RES_DD$sigmaA-RES_DD$sigmaB)^2)+1)
-RES_DD$PSSdir <- RES_DD$PSSdir /max(RES_DD$PSSdir, na.rm = T)
-RES_DD$PSSmag <- RES_DD$PSSmag /max(RES_DD$PSSmag, na.rm = T)
-
-RES_DD_2$PSSdir <- log((RES_DD_2$sigmaA/RES_DD_2$sigmaB)^2)
-RES_DD_2$PSSmag <- log(sqrt((RES_DD_2$sigmaA-RES_DD_2$sigmaB)^2)+1)
-RES_DD_2$PSSdir <- RES_DD_2$PSSdir /max(RES_DD_2$PSSdir, na.rm = T)
-RES_DD_2$PSSmag <- RES_DD_2$PSSmag /max(RES_DD_2$PSSmag, na.rm = T)
-
-#########
-## Step 4) Variance partitioning 
-#########
-
-RES_DD$ass <- log(RES_DD$sigmaA/RES_DD$sigmaB)
-
-lmm <- lme4::lmer(QZscorex~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
-lmm2 <- lme4::lmer(NODFx~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
-
-lmm3 <- lme4::lmer(QZscoresd~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
-lmm4 <- lme4::lmer(NODFsd~ass + (1+ass|intHyp), RES_DD[complete.cases(RES_DD),])
-
-
-
-slopes <- c(lme4::fixef(lmm)["ass"]+lme4::ranef(lmm)$intHyp$ass, lme4::fixef(lmm2)["ass"]+lme4::ranef(lmm2)$intHyp$ass)
-slopes2 <- c(lme4::fixef(lmm3)["ass"]+lme4::ranef(lmm3)$intHyp$ass, lme4::fixef(lmm4)["ass"]+lme4::ranef(lmm4)$intHyp$ass)
-
-
-
-
-
-
-
+RES_DD$ass <- log(c(1-RES_DD$sigmaB)/c(1-RES_DD$sigmaA))
+RES_DD$ass <- RES_DD$ass/max(abs(RES_DD$ass))
 
 
 ############################################################
@@ -266,6 +236,159 @@ plot_mm_b <- toplot(cr_mm_b)
 
 
 
+a_eff <- rbind(plot_nl_a,plot_fl_a,plot_mm_a)
+b_eff <- rbind(plot_nl_b,plot_fl_b,plot_mm_b)
+
+
+
+butd_eff <- data.frame(
+        "nodf_eff"= log(abs(b_eff$nodf)/ abs(a_eff$nodf)),
+        "q_eff"= log(abs(b_eff$q)/ abs(a_eff$q)),
+        "ass" = a_eff$pss,
+        "intHyp" =  c(rep("NL",25), rep("FL",25), rep("MM",25))
+        
+)
+
+
+
+
+
+
+
+RES_DD$SymTF <- ifelse(RES_DD$ass>0,1,0)
+intAss_mod_Q <- glm(RES_DD$QZscorex~RES_DD$ass*RES_DD$intHyp)
+intAss_mod_NODF <- glm(RES_DD$NODFx~RES_DD$ass*RES_DD$intHyp)
+
+summary(intAss_mod_Q)
+with(summary(intAss_mod_Q), 1 - deviance/null.deviance)
+with(summary(intAss_mod_NODF), 1 - deviance/null.deviance)
+
+library(rcompanion)
+
+nagelkerke(intAss_mod_Q)
+nagelkerke(intAss_mod_NODF)
+sjPlot::tab_model(intAss_mod_Q)
+sjPlot::tab_model(intAss_mod_NODF)
+
+
+
+CCData_mod <- yhat::commonalityCoefficients(RES_DD, "QZscorex", list("ass", "EA", "intHyp"))
+CCData_nes <- yhat::commonalityCoefficients(RES_DD, "NODFx", list("ass", "EA","intHyp"))
+
+
+
+
+
+
+dim(RES_ass)/3
+RES_ass <- RES_DD[!RES_DD$ass == 0,]
+RES_ass0 <- RES_DD[RES_DD$ass == 0,]
+
+dim(RES_ass0)/3
+
+
+
+
+
+
+
+
+butd_eff$key <- paste(a_eff$size1,a_eff$size2, butd_eff$intHyp, sep = "_")
+RES_ass$key <- paste(RES_ass$sigmaA, RES_ass$sigmaB, RES_ass$intHyp, sep = "_")
+
+ass_null <- data.frame(aggregate(RES_ass0$QZscorex, list(RES_ass0$intHyp), mean),
+           "sd" = aggregate(RES_ass0$QZscorex, list(RES_ass0$intHyp), sd)$x)
+
+
+ass_null2 <- data.frame(aggregate(RES_ass0$QZscorex, list(RES_ass0$intHyp), mean),
+                       "sd" = aggregate(RES_ass0$QZscorex, list(RES_ass0$intHyp), sd)$x)
+
+
+
+
+
+
+
+
+assdev <- ifelse(RES_ass$intHyp == "NL",
+                 (RES_ass$QZscorex-ass_null2$x[1])/ass_null2$sd[1],
+                 ifelse(RES_ass$intHyp == "MM",
+                        (RES_ass$QZscorex-ass_null2$x[2])/ass_null2$sd[2],
+                        (RES_ass$QZscorex-ass_null2$x[3])/ass_null2$sd[3]))
+
+
+assdev2 <- ifelse(RES_ass$intHyp == "NL",
+                 (RES_ass$NODFx-ass_null$x[1])/ass_null$sd[1],
+                 ifelse(RES_ass$intHyp == "MM",
+                        (RES_ass$NODFx-ass_null$x[2])/ass_null$sd[2],
+                        (RES_ass$NODFx-ass_null$x[3])/ass_null$sd[3]))
+
+
+
+
+
+
+
+
+
+## Step 4) Variance partitioning 
+#########
+
+
+
+try<-RES_DD[complete.cases(RES_DD),]
+
+plot(dist(scale(try$QZscoresd))~dist(try$ass))
+
+
+
+# model_aeff_nes <- lme4::lmer((NODFx)~ass + (1+ass|intHyp), data = RES_ass)
+# model_aeff_q <- lme4::lmer((QZscorex)~ass + (1+ass|intHyp), data = RES_ass)
+# 
+# 
+# 
+# slopes <- c(lme4::ranef(model_aeff_nes)$intHyp$ass, 
+#             lme4::ranef(model_aeff_q)$intHyp$ass)
+# 
+# slopes2 <- c(lme4::fixef(lmm3)["ass"]+
+#                      lme4::ranef(lmm3)$intHyp$ass, 
+#              lme4::fixef(lmm4)["ass"]+
+#                      lme4::ranef(lmm4)$intHyp$ass)
+# 
+# 
+# sjPlot::tab_model(model_aeff_nes)
+# 
+# sjPlot::tab_model(model_aeff_q)
+# 
+# 
+# 
+# 
+# lme4::ranef(model_aeff_nes)
+# 
+# lme4::ranef(model_aeff_q)
+# 
+# sjPlot::tab_model(model_aeff_nes)
+# sjPlot::tab_model(model_aeff_q)
+
+
+
+matt3 <- apply(abs(matt), 2, function(x) x/rowSums(abs(matt)))
+matt3 <- matt3*100
+
+
+
+
+matt2 <- as.matrix.data.frame(cbind(a_eff$q,b_eff$q, butd_eff$ass))
+apply(apply(matt2, 2, abs), 2, max)
+matt2[,1] <- matt2[,1]/apply(apply(matt2, 2, abs), 2, max)[1]
+matt2[,2] <- matt2[,2]/apply(apply(matt2, 2, abs), 2, max)[2]
+
+matt2[,1] <- (matt2[,1]*50)+50
+matt2[,2] <- (matt2[,2]*50)+50
+matt2[,3] <- (matt2[,3]*50)+50
+
+
+
 
 ############################################################
 ## Step 5) Plot the results
@@ -280,25 +403,26 @@ plot_mm_b <- toplot(cr_mm_b)
 ## Figure 3a: Two dimensional space defined by modularity and nestedness axis.
 #####
 #######
-dev.off()
-par( mfrow = c(1,2),mar=c(6,6,4,4), las = 1)
+
+png("SimulRes.png", width = 1000, height = 1000, pointsize = 20, res = 110)
+par(mfrow = c(1,1), oma = c(1,1,3,1), mar = c(4,5,3,2))
 plot(NODFx~QZscorex,
      frame = F,
      xlim = c(0, 150),
      ylim = c(0,250),
-     pch = ifelse( RES_DD$intHyp == "NL", 1, 
-                   ifelse( RES_DD$intHyp == "FL", 0,
-                           2)),
-     col = ifelse( RES_DD$intHyp == "NL", "#FADE43", 
+     pch = ifelse( RES_DD$intHyp == "NL", 16, 
+                   ifelse( RES_DD$intHyp == "FL", 15,
+                           17)),
+     col = scales::alpha(ifelse( RES_DD$intHyp == "NL", "#FADE43", 
                    ifelse( RES_DD$intHyp == "FL", "#E0A738",
-                           "#9C413D")),
-     xlab = "Modularity (Q-Zscore)", 
-     ylab = "Nestedness (NODF-Zscore)", 
+                           "#9C413D")),0.4),
+     xlab = "Modularity (Q Z-score)", 
+     ylab = "Nestedness (NODF Z-score)", 
      cex.lab = 1.5,
      cex.axis = 1,
      cex = 1, 
      data = RES_DD[!RES_DD$EA == "ND",])
-
+mtext("A",3, outer = T, adj = 0 , cex = 2.5)
 
 Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")],
                  RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")], 
@@ -321,7 +445,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx,
-         lwd = 2, lty = 1, col = scales::alpha("#FADE43",0.9))
+         lwd = 4, lty = 1, col = scales::alpha("#FADE43",0.9))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("NL"),]$NODFsd,
@@ -329,7 +453,7 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("NL"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$QZscorex, 
-         lwd = 2, lty = 1,col = scales::alpha("#FADE43",0.9))
+         lwd = 4, lty = 1,col = scales::alpha("#FADE43",0.9))
 
 segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscorex
          -RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscoresd,
@@ -337,7 +461,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx,
-         lwd = 2, lty = 1, col = scales::alpha("#9C413D",0.9))
+         lwd = 4, lty = 1, col = scales::alpha("#9C413D",0.9))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("MM"),]$NODFsd,
@@ -345,7 +469,7 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("MM"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$QZscorex, 
-         lwd = 2, lty = 1,col = scales::alpha("#9C413D",0.9))
+         lwd = 4, lty = 1,col = scales::alpha("#9C413D",0.9))
 
 segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscorex
          -RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscoresd,
@@ -353,7 +477,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx,
-         lwd = 2, lty = 1, col = scales::alpha("#E0A738",0.9))
+         lwd = 4, lty = 1, col = scales::alpha("#E0A738",0.9))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("FL"),]$NODFsd,
@@ -361,62 +485,31 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("FL"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$QZscorex, 
-         lwd = 2, lty = 1,col = scales::alpha("#E0A738",0.9))
+         lwd = 4, lty = 1,col = scales::alpha("#E0A738",0.9))
 ###################
 
 
 legend("topleft", 
-       title = "Interaction assembly",
+       title = "Interaction assembly type",
        legend = c("Morphological matching", 
                   "Forbidden links",
                   "Stochastic interactions"),
-       pch = c(2,0,1), cex = 0.7,
+       pch = c(2,0,1)+15,
+       cex = 0.7,
+       bty = "n",
        col = c("#9C413D","#E0A738","#FADE43"))
 
 legend("bottomleft", 
        title = "Community assembly",
        legend = c("Environmental filtering", 
                   "Neutral assembly"),
-       lty = c(2,1),cex = 0.7,
+       lty = c(2,1), lwd  = c(3,3),
+       cex = 0.7, 
+       bty = "n",
        col = c("gray80","black"))
 
 
-
-
-
-
-
-
-
-
-
-barplot(slopes[c(1,4,2,5,3,6)],
-        ylim = c(-5,15), 
-        col = c("#FADE43","#FADE43","#E0A738",
-                "#E0A738","#9C413D","#9C413D"),
-        ylab = "ß Process strength assymetry", 
-        cex.lab = 1.5)
-legend("topright", 
-       legend = c("Morphological matching",
-                  "Forbidden links",
-                  "Stochastic interactions"),
-       cex = 0.7,
-       fill = c("#FADE43","#E0A738","#9C413D"))
-
-#################
-
-
-
-
-barplot(slopes2[c(1,4,2,5,3,6)],
-        ylim = c(0,1), 
-        col = c("#FADE43","#FADE43","#E0A738","#E0A738","#9C413D","#9C413D"))
-
-
-
-
-
-
+ dev.off()
 
 
 #######
@@ -424,70 +517,247 @@ barplot(slopes2[c(1,4,2,5,3,6)],
 ########
 
 
-plot(log(abs(plot_nl_a$nodf)/abs(plot_nl_b$nodf))~
-       log(plot_nl_a$size1/plot_nl_b$size2),
-     xlim = c(-3,3),
-     xlab = "Process strenght assymetry", 
-     ylab = "Effect size log-ratio \n (SES consumer/SES resource)",
-     col = "#FADE43",
-     ylim = c(-3,3))
-abline(h = 0, v = 0, lty = 2)
-abline(lm(log(abs(plot_nl_a$nodf)/abs(plot_nl_b$nodf))~
-            log(plot_nl_a$size1/plot_nl_b$size2)),
-       col = "#FADE43")
+png("BUTDNODF.png", width = 1000, height = 1000, pointsize = 20, res = 110)
 
-points(log(abs(plot_fl_a$nodf)/abs(plot_fl_b$nodf))~
-       log(plot_fl_a$size1/plot_fl_b$size2), 
-       pch = 2, col = "#E0A738")
+ par(mfrow = c(1,1), oma = c(1,1,3,1), mar = c(4,5,3,2))
+ plot((butd_eff$nodf_eff)[match(RES_ass$key,butd_eff$key)]~c(assdev2/max(abs(assdev2))), 
+     col = scales::alpha(ifelse(butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", "#FADE43", 
+                                ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", "#E0A738",
+                                        "#9C413D")),0.5),
+     xlab = "PSA effect on nestedness",
+     ylab = "Network assembly mode",
+     cex.lab = 1.5,
+     frame =F,
+     xlim = c(-1,1),
+     ylim = c(-6,6),
+     pch = ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", 16, 
+                   ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", 15,
+                           17)))
+points(butd_eff$nodf_eff[match(RES_ass$key,butd_eff$key)]~c(assdev2/max(abs(assdev2))) , 
+       col = scales::alpha(ifelse(butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", "#FADE43", 
+                                  ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       pch = ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", 1, 
+                     ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", 0,
+                             2)))
+abline(h=0,v=0, lty = 2)
 
-abline(lm(log(abs(plot_fl_a$nodf)/abs(plot_fl_b$nodf))~
-            log(plot_fl_a$size1/plot_fl_b$size2)),
-       col =  "#E0A738")
+legend("topleft", "Top-down", bty = "n")
+legend("bottomleft", "Bottom-up", bty = "n")
 
-points(log(abs(plot_mm_a$nodf)/abs(plot_mm_b$nodf))~
-       log(plot_mm_a$size1/plot_mm_b$size2), 
-       pch = 1, col = "#9C413D")
+legend("bottomright", 
+       title = "Interaction assembly type",
+       legend = c("Morphological matching", 
+                  "Forbidden links",
+                  "Stochastic interactions"),
+       pch = c(2,0,1)+15,
+       cex = 0.7,
+       bty = "n",
+       col = c("#9C413D","#E0A738","#FADE43"))
+mtext("C",3, outer = T, adj = 0 , cex = 2.5)
 
-abline(lm(log(abs(plot_mm_a$nodf)/abs(plot_mm_b$nodf))~
-            log(plot_mm_a$size1/plot_mm_b$size2)),
-       pch = 1,  col = "#9C413D")
+dev.off()
+
 
 
 ###
+png("BUTD_MOD.png", width = 1000, height = 1000, pointsize = 20, res = 110)
 
-plot(log(abs(plot_nl_a$q)/abs(plot_nl_b$q))~
-       log(plot_nl_a$size1/plot_nl_b$size2),
-     xlim = c(-3,3),
-     col = "#FADE43",
-     xlab = "Process strenght assymetry", 
-     ylab = "Effect size log-ratio \n (SES consumer/SES resource)",
-     ylim = c(-3,3))
-abline(h = 0, v = 0, lty = 2)
-abline(lm(log(abs(plot_nl_a$q)/abs(plot_nl_b$q))~
-            log(plot_nl_a$size1/plot_nl_b$size2)),
-       col = "#FADE43")
+par(mfrow = c(1,1), oma = c(1,1,3,1), mar = c(4,5,3,2))
 
-points(log(abs(plot_fl_a$q)/abs(plot_fl_b$q))~
-         log(plot_fl_a$size1/plot_fl_b$size2), 
-       pch = 2, col = "#E0A738")
+plot((butd_eff$q_eff)[match(RES_ass$key,butd_eff$key)]~c(assdev/max(abs(assdev))), 
+     col = scales::alpha(ifelse(butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", "#FADE43", 
+                                ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", "#E0A738",
+                                        "#9C413D")),0.5),
+     xlab = "PSA effect on modularity",
+     ylab = "Network assembly mode",
+     cex.lab = 1.5,
+     frame =F,
+     xlim = c(-1,1),
+     ylim = c(-6,6),
+     pch = ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", 16, 
+                   ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", 15,
+                           17)))
+points(butd_eff$q_eff[match(RES_ass$key,butd_eff$key)]~c(assdev/max(abs(assdev))) , 
+       col = scales::alpha(ifelse(butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", "#FADE43", 
+                                  ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       pch = ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "NL", 1, 
+                     ifelse( butd_eff$intHyp[match(RES_ass$key,butd_eff$key)] == "FL", 0,
+                             2)))
+abline(h=0,v=0, lty = 2)
 
-abline(lm(log(abs(plot_fl_a$q)/abs(plot_fl_b$q))~
-            log(plot_fl_a$size1/plot_fl_b$size2)),
-       col =  "#E0A738")
+legend("topleft", "Top-down", bty = "n")
+legend("bottomleft", "Bottom-up", bty = "n")
 
-points(log(abs(plot_mm_a$q)/abs(plot_mm_b$q))~
-         log(plot_mm_a$size1/plot_mm_b$size2), 
-       pch = 1, col = "#9C413D")
+legend("bottomright", 
+       title = "Interaction assembly type",
+       legend = c("Morphological matching", 
+                  "Forbidden links",
+                  "Stochastic interactions"),
+       pch = c(2,0,1)+15,
+       cex = 0.7,
+       bty = "n",
+       col = c("#9C413D","#E0A738","#FADE43"))
 
-abline(lm(log(abs(plot_mm_a$q)/abs(plot_mm_b$q))~
-            log(plot_mm_a$size1/plot_mm_b$size2)),
-       pch = 1,  col = "#9C413D")
+mtext("B",3, outer = T, adj = 0 , cex = 2.5)
+
+dev.off()
+
+#########
+
+
+
+
+# write the final image 
+
+magick::image_write(
+        magick::image_append(c(
+                                magick::image_read("SimulRes.png"),
+                                magick::image_read("BUTD_MOD.png"),
+                                magick::image_read("BUTDNODF.png")),
+                             stack = F),
+        "Figure3Final.png")
+
+
+##########
+# Appendix figure
+######
+
+
+
+
+par(mfrow = c(1,2))
+
+plot(abs(a_eff$nodf)~abs(b_eff$nodf),
+     xlim = c(0.001,9), 
+     ylim = c(0.001,9), 
+     log = "xy",
+     main = "Nestedness (NODF)",
+     xlab = as.expression(bquote('SES'['NET']*' '*.("Consumer"))),
+     ylab =  as.expression(bquote('SES'['NET']*' '*.("Resource"))),
+     cex = 1+butd_eff$ass,
+     col = scales::alpha(ifelse( butd_eff$intHyp == "NL", "#FADE43", 
+                                 ifelse( butd_eff$intHyp == "FL", "#E0A738",
+                                         "#9C413D")),0.4),
+     pch = ifelse( butd_eff$intHyp == "NL", 16, 
+                   ifelse( butd_eff$intHyp == "FL", 15,
+                           17)))
+
+
+points(abs(a_eff$nodf)~abs(b_eff$nodf),
+       cex = 1+butd_eff$ass,
+       col = scales::alpha(ifelse(butd_eff$intHyp == "NL", "#FADE43", 
+                                  ifelse( butd_eff$intHyp == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       pch = ifelse( butd_eff$intHyp == "NL", 1, 
+                     ifelse( butd_eff$intHyp == "FL", 0,
+                             2)))
+abline(a=0,b=1, lty = 2)
 
 
 
 
 
 
+
+
+plot(abs(a_eff$q)~abs(b_eff$q),
+     xlim = c(0.001,9), 
+     ylim = c(0.001,9), 
+     log = "xy",
+     main = "Modularity (Q)",
+     xlab = as.expression(bquote('SES'['NET']*' '*.("Consumer"))),
+     ylab =  as.expression(bquote('SES'['NET']*' '*.("Resource"))),
+     cex = 1+butd_eff$ass,
+     col = scales::alpha(ifelse( butd_eff$intHyp == "NL", "#FADE43", 
+                                 ifelse( butd_eff$intHyp == "FL", "#E0A738",
+                                         "#9C413D")),0.4),
+     pch = ifelse( butd_eff$intHyp == "NL", 16, 
+                   ifelse( butd_eff$intHyp == "FL", 15,
+                           17)))
+
+
+points(abs(a_eff$q)~abs(b_eff$q),
+       cex = 1+butd_eff$ass,
+       col = scales::alpha(ifelse(butd_eff$intHyp == "NL", "#FADE43", 
+                                  ifelse( butd_eff$intHyp == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       pch = ifelse( butd_eff$intHyp == "NL", 1, 
+                     ifelse( butd_eff$intHyp == "FL", 0,
+                             2)))
+
+abline(a=0,b=1, lty = 2)
+
+
+
+
+
+
+
+
+par(mfrow = c(2,2), mar = c(4,4,2,2))
+
+plot(RES_ass$QZscorex~RES_ass$ass, 
+     col = scales::alpha(ifelse(RES_ass$intHyp == "NL", "#FADE43", 
+                                ifelse( RES_ass$intHyp == "FL", "#E0A738",
+                                        "#9C413D")),0.9),
+     pch = 16,
+     ylab = "Q (Z-score)", 
+     xlab = "Process strength asymmetry",
+     cex = 1.5,
+     frame = F)
+points(RES_ass0$QZscorex~rep(0,dim(RES_ass0)[1]), 
+       col = scales::alpha(ifelse(RES_ass0$intHyp == "NL", "#FADE43", 
+                                  ifelse( RES_ass0$intHyp == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       cex=  1.5)
+       
+plot(RES_ass$NODFx~RES_ass$ass, 
+     col = scales::alpha(ifelse(RES_ass$intHyp == "NL", "#FADE43", 
+                                ifelse( RES_ass$intHyp == "FL", "#E0A738",
+                                        "#9C413D")),0.9),
+     pch = 16,
+     ylab = "NODF (Z-score)", 
+     xlab = "Process strength asymmetry",
+     cex = 1.5,
+     frame = F)
+points(RES_ass0$NODFx~rep(0,dim(RES_ass0)[1]), 
+       col = scales::alpha(ifelse(RES_ass0$intHyp == "NL", "#FADE43", 
+                                  ifelse( RES_ass0$intHyp == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       cex=  1.5)
+
+
+plot(RES_ass$QZscoresd~RES_ass$ass, 
+     col = scales::alpha(ifelse(RES_ass$intHyp == "NL", "#FADE43", 
+                                ifelse( RES_ass$intHyp == "FL", "#E0A738",
+                                        "#9C413D")),0.9),
+     pch = 16,
+     ylab = "Q (Z-score) SD", 
+     xlab = "Process strength asymmetry",
+     cex = 1.5,
+     frame = F)
+points(RES_ass0$QZscoresd~rep(0,dim(RES_ass0)[1]), 
+       col = scales::alpha(ifelse(RES_ass0$intHyp == "NL", "#FADE43", 
+                                  ifelse( RES_ass0$intHyp == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       cex=  1.5)
+
+plot(RES_ass$NODFsd~RES_ass$ass, 
+     col = scales::alpha(ifelse(RES_ass$intHyp == "NL", "#FADE43", 
+                                ifelse( RES_ass$intHyp == "FL", "#E0A738",
+                                        "#9C413D")),0.9),
+     pch = 16,
+     ylab = "NODF (Z-score) SD", 
+     xlab = "Process strength asymmetry",
+     cex = 1.5,
+     frame = F)
+points(RES_ass0$NODFsd~rep(0,dim(RES_ass0)[1]), 
+       col = scales::alpha(ifelse(RES_ass0$intHyp == "NL", "#FADE43", 
+                                  ifelse( RES_ass0$intHyp == "FL", "#E0A738",
+                                          "#9C413D")),0.9),
+       cex=  1.5)
 
 
 
