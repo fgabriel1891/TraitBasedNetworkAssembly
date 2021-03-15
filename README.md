@@ -8,7 +8,7 @@ Code to replicate the analyses and figures from:
 
 # Trait-based inference of ecological network assembly: a conceptual framework and methodological toolbox
 
-## Emma-Liina Marjakangas <sup>*</sup> <sup>1,</sup><sup>2</sup>, Gabriel Muñoz <sup>*</sup> <sup>3</sup>, Shaun Turney <sup>*</sup> <sup>3</sup>, Jörg Albrecht <sup>4</sup>, Eike Lena Neuschulz <sup>4</sup>, Matthias Schleuning <sup>4</sup>, Jean-Philippe Lessard <sup>4</sup>
+## Emma-Liina Marjakangas <sup>\*</sup> <sup>1,</sup><sup>2</sup>, Gabriel Muñoz <sup>\*</sup> <sup>3</sup>, Shaun Turney <sup>*</sup> <sup>3</sup>, Jörg Albrecht <sup>4</sup>, Eike Lena Neuschulz <sup>4</sup>, Matthias Schleuning <sup>4</sup>, Jean-Philippe Lessard <sup>4</sup>
 
 submitted to: *Ecological Monographs*
 
