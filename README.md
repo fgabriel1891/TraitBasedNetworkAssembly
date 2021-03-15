@@ -5,7 +5,8 @@
 
 Code to replicate the analyses and figures shown in:
 # Trait-based inference of ecological network assembly
-## Emma-Liina Marjakangas _{1},_2,\*, Gabriel Muñoz 3 \*, Shaun Turney 3 \*, Jörg Albrecht4, Eike Lena Neuschulz4, Matthias Schleuning4, Jean-Philippe Lessard3
+## Emma-Liina Marjakangas ^1^ 
+,_2,\*, Gabriel Muñoz 3 \*, Shaun Turney 3 \*, Jörg Albrecht4, Eike Lena Neuschulz4, Matthias Schleuning4, Jean-Philippe Lessard3
 
 -----------
 1 Centre for Biodiversity Dynamics, Department of Biology, Norwegian University of Science and Technology, N-7491 Trondheim, Norway
