@@ -3,9 +3,17 @@
 [![DOI](https://zenodo.org/badge/232598249.svg)](https://zenodo.org/badge/latestdoi/232598249)
 
 
-Code to replicate the analyses and figures shown in:
-# Trait-based inference of ecological network assembly
+Code to replicate the analyses and figures from:
+
+
+# Trait-based inference of ecological network assembly: a conceptual framework and methodological toolbox
+
 ## Emma-Liina Marjakangas <sup>1</sup>,<sup>2</sup>,\*, Gabriel Muñoz <sup>3</sup>\*, Shaun Turney <sup>3</sup> \*, Jörg Albrecht <sup>4</sup>, Eike Lena Neuschulz <sup>4</sup>, Matthias Schleuning <sup>4</sup>, Jean-Philippe Lessard <sup>4</sup>
+
+submitted to: *Ecological Monographs*
+
+DOI: TBD. 
+
 
 -----------
 1 Centre for Biodiversity Dynamics, Department of Biology, Norwegian University of Science and Technology, N-7491 Trondheim, Norway
