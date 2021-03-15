@@ -11,6 +11,8 @@
 # * These authors contributed equally to this study
 ###################################
 
+library(reshape2)
+
 #####
 # Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
 #####
@@ -18,6 +20,12 @@
 #####
 # Custom functions 
 #####
+
+
+######
+# a) Simulating network assembly (START)
+#####
+
 
 
 #' Create a Species Pool 
@@ -29,7 +37,8 @@
 #' @param J Total number of species in the pool 
 #' @param poolShape Rank-abundance curve shape, options = uniform or log-series
 
-CreateSpPool <- function(Jpool, J, poolShape = c("uniform", "log-series")) {
+CreateSpPool <- function(Jpool, J, poolShape = c("uniform",
+                                                 "log-series")) {
   
   if (poolShape == "uniform") { 
     
@@ -378,7 +387,7 @@ createMetaMatrix <- function(Resource,
   
   if (intHyp == "FL"){
     ## Forbidden links 1-trait <= 0 --> int prob = 0 
-    metaMatrix$intProb <- ifelse(metaMatrix$trait1-metaMatrix$trait2 >= 0,
+    metaMatrix$intProb <- ifelse(metaMatrix$trait2-metaMatrix$trait1 >= 0,
                                  metaMatrix$intProb * 1,
                                  metaMatrix$intProb * 0)
   } 
@@ -411,7 +420,7 @@ createMetaMatrix <- function(Resource,
 #' @param repNull Number of matrix replicates to create the nullmodels for nestedness and modularity
 #' @return a list object with "metrics" containing the network metrics calculated and  "wnet" the realized network of each replicate 
 
-##########
+####
 calculateMetrix <- function(metaMatrix, quantile, nulltype, repNull = 100){
   
   # Create the weighted meta-network 
@@ -743,7 +752,7 @@ sortMATRIX <- function(MATRIX,binary,sortvar) {
 }
 
 
- 
+
 #' Plot_ConvexHull
 #' 
 #' Plot a covex hull from a list of given vectors 
@@ -775,9 +784,8 @@ con_res_efz <- function(RES_butd, RES1, filt, int, ab = c("a","b")){
     q_xdif <- RES_butd$QZscorex[RES_butd$sigmaA == filt & RES_butd$intHyp == int]-RES1$QZscorex[RES1$sigmaA == filt & RES1$intHyp == int]
     q_sd_pool <- sqrt(RES_butd$QZscoresd[RES_butd$sigmaA == filt & RES_butd$intHyp == int]^2+RES1$QZscoresd[RES1$sigmaA == filt & RES1$intHyp == int]^2)
     q_efz <- q_xdif/q_sd_pool
-    pss <- RES1$PSSdir[RES1$sigmaA == filt & RES1$intHyp == int]
+    pss <- RES1$ass[RES1$sigmaA == filt & RES1$intHyp == int]
     
-    psm <- RES1$PSSmag[RES1$sigmaA == filt & RES1$intHyp == int]
     
   }
   
@@ -791,12 +799,12 @@ con_res_efz <- function(RES_butd, RES1, filt, int, ab = c("a","b")){
     q_xdif <- RES_butd$QZscorex[RES_butd$sigmaB == filt & RES_butd$intHyp == int]-RES1$QZscorex[RES1$sigmaB == filt & RES1$intHyp == int]
     q_sd_pool<- sqrt(RES_butd$QZscoresd[RES_butd$sigmaB == filt & RES_butd$intHyp == int]^2+RES1$QZscoresd[RES1$sigmaB == filt & RES1$intHyp == int]^2)
     q_efz <- q_xdif/q_sd_pool
-    pss <- RES1$PSSdir[RES1$sigmaB == filt & RES1$intHyp == int]
-    psm <- RES1$PSSmag[RES1$sigmaB == filt & RES1$intHyp == int]
+    pss <- RES1$ass[RES1$sigmaA == filt & RES1$intHyp == int]
+    
   }
   
   
-  return(data.frame(n_efz,q_efz,pss, psm))
+  return(data.frame(n_efz,q_efz,pss))
   
   
 }
@@ -810,15 +818,529 @@ toplot <- function(cr_nl_a){
                        "q"= c(cr_nl_a[,1]$q_efz,cr_nl_a[,2]$q_efz,cr_nl_a[,3]$q_efz,cr_nl_a[,4]$q_efz,cr_nl_a[,5]$q_efz),
                        "size1" = c(1-sapply(seq(0.1,1,0.2),function(x)rep(x,5))),
                        "size2" = rep(1-seq(0.1,1,0.2),5),
-                       "pss" = c(cr_nl_a[,1]$pss,cr_nl_a[,2]$pss,cr_nl_a[,3]$pss,cr_nl_a[,4]$pss,cr_nl_a[,5]$pss),
-                       "psm" = c(cr_nl_a[,1]$psm,cr_nl_a[,2]$psm,cr_nl_a[,3]$psm,cr_nl_a[,4]$psm,cr_nl_a[,5]$psm)
-  )
+                       "pss" = c(cr_nl_a[,1]$pss,cr_nl_a[,2]$pss,cr_nl_a[,3]$pss,cr_nl_a[,4]$pss,cr_nl_a[,5]$pss))
   return(toplot)
   
 }
 
 
 
+######
+# a) Simulating network assembly (END)
+#####
 
+
+
+######
+# b) Inferring network assembly (START)
+######
+
+
+#' CustomCostDist 
+#' 
+#' Function to geoprocess the raster into cost-distance matrices based on points occurrences
+#' @param raster a raster to process
+#' @param centroids a vector of centroids to calculate the distance matrices 
+#' 
+CustomCostDist <- function(raster, centroids ){ 
+  centroidPoint <- sp::SpatialPoints(raster::coordinates(centroids[,c(1,2)]))
+  ## change raster into transition matrices 
+  ## (cost of moving pixel = mean btw pixels, 4 directions), and geocorrect for planar geometries
+  tr <- transition( 1/raster, transitionFunction = mean, directions = 4 )
+  tr <- geoCorrection( tr, type="c", multpl=FALSE, scl=FALSE)
+  ## Get costDistance pairwise matrices
+  eDist <- costDistance( tr, centroidPoint )
+  eDist <- as.matrix(eDist)
+  # Fix row and col names
+  rownames(eDist) <- colnames(eDist) <- centroids$site
+  return(eDist)
+}
+
+
+
+
+
+#' Test4EF 
+#' 
+#' Function to test for environmental filtering given different choices of process based or random based species pools 
+#' @param pool species pool
+#' @param nrep Number of replicates 
+#' @param side Trophic level to test
+#' @param RoP Type of sample random or process based
+#' @param sdOrRange Type of measure to create the null model 
+#' @param ProbPool Probabilistic species pool
+#' 
+test4EF <- function(pool,
+                    traitName, 
+                    nrep = 100,
+                    side = c("P","A"),
+                    RoP = c("Prob","Random"), 
+                    sdOrRange = c("sd", "range"), 
+                    ProbPool = ProbPool){ 
+  
+  
+  
+  ## calculate observed sd or range
+  if(sdOrRange == "sd"){
+    # calculate sd 
+    obsDis <- aggregate(pool[[traitName]], list(pool$site), sd)$x
+    names(obsDis) <- levels(pool$site)
+    
+    
+  }
+  if(sdOrRange == "range"){
+    # calculate range
+    obsMin <- aggregate(pool[[traitName]], list(pool$site), min)$x
+    obsMax <- aggregate(pool[[traitName]], list(pool$site), max)$x
+    obsDis <- abs(obsMin-obsMax)
+    names(obsDis) <- levels(pool$site)
+    
+    
+  }
+  
+  ## Create null models (random or process based)
+  if(RoP == "Random"){
+    # create randomized null models 
+    if(side == "P"){
+      # get diversity of plants
+      divVec <- colSums(ifelse(table(pool$plantCode,pool$site) > 1, 1,0))
+      if(sdOrRange == "sd"){
+        # make null model 
+        nullDis <- lapply(divVec, function(x) replicate(nrep,
+                                                        sd(unlist(pool[traitName])[
+                                                          match(sample(unique(pool$plantCode), x), 
+                                                                pool$plantCode)] )))
+      }
+      if(sdOrRange == "range"){
+        nullRang <- lapply(divVec, function(x) replicate(nrep,
+                                                         range(unlist(pool[traitName])[
+                                                           match(sample(unique(pool$plantCode), x), 
+                                                                 pool$plantCode)] )))
+        
+        
+        nullDis <- lapply(nullRang, function(x) diff(x))
+      } 
+    }
+    if(side == "A"){
+      # get diversity of animals
+      divVec <- colSums(ifelse(table(pool$animalCode,pool$site) > 1, 1,0))
+      # make null model 
+      if(sdOrRange == "sd"){
+        # make null model 
+        nullDis <- lapply(divVec, function(x) replicate(nrep,
+                                                        sd(unlist(pool[traitName])[
+                                                          match(sample(unique(pool$animalCode), x), 
+                                                                pool$animalCode)] )))
+      }
+      if(sdOrRange == "range"){
+        nullRang <- lapply(divVec, function(x) replicate(nrep,
+                                                         range(unlist(pool[traitName])[
+                                                           match(sample(unique(pool$animalCode), x), 
+                                                                 pool$animalCode)] )))
+        
+        
+        nullDis <- lapply(nullRang, function(x) diff(x))
+      } 
+      
+    }
+    
+  }
+  if(RoP == "Prob"){
+    if(side == "P"){
+      divVecPlant <- colSums(ifelse(table(pool$plantCode,pool$site) > 1, 1,0))
+      
+      
+      # plants
+      NullTrP <- NullTraitDiv(divVecPlant,ProbPool,pool, nrep , "P")
+      NullTrP <- reshape2::melt(NullTrP)
+      NullTrP$RQLp <- pool$RQLp[match(NullTrP$value,pool$plantCode )]
+      if(sdOrRange == "range"){
+        nullDis <- lapply(1:length(unique(NullTrP$L1)), 
+                          function(x)
+                            ZdisCalR(unique(NullTrP$L1)[x],NullTrP, "P" ))
+        
+      }
+      if(sdOrRange == "sd"){
+        
+        nullDis <- lapply(1:length(unique(NullTrP$L1)), 
+                          function(x)
+                            ZdisCalSD(unique(NullTrP$L1)[x],NullTrP, "P" ))
+      }
+      
+      
+    }
+    if(side == "A"){
+      divVecAn <- colSums(ifelse(table(pool$animalCode,pool$site) > 1, 1,0))
+      # animals 
+      NullTrA <- NullTraitDiv(divVecAn,ProbPool,pool, nrep, "A" )
+      NullTrA <- reshape2::melt(NullTrA)
+      NullTrA$RQLa <- pool$RQLa[match(NullTrA$value,pool$animalCode )]
+      
+      if(sdOrRange == "range"){
+        nullDis <- lapply(1:length(unique(NullTrA$L1)), 
+                          function(x)
+                            ZdisCalR(unique(NullTrA$L1)[x],NullTrA, "A" ))
+      }
+      
+      if(sdOrRange == "sd"){
+        nullDis <- lapply(1:length(unique(NullTrA$L1)), 
+                          function(x)
+                            ZdisCalSD(unique(NullTrA$L1)[x],NullTrA, "A" ))
+      }
+      
+    }
+  }
+  
+  
+  # calculate sd and mean from null dist 
+  sdNull <- sapply(nullDis, function(x) sd(x))
+  xNull <- sapply(nullDis, function(x) mean(x))
+  
+  # compute ses
+  SES <- (obsDis-xNull )/sdNull
+  
+  return(SES)
+  
+}
+
+
+### Helper functions 
+
+## Lets define first a series of helpful functions to be able to calculate Environmental Filtering intensity and to try different combinations of methodologies as sensitivity analisis 
+
+
+
+#'SpeciesSampler 
+#'
+#'helper function that accepts a diversity scalar and returns a list of species randomized, based on the probabilities of the probPool
+#' @param divVec diversity vector 
+#' @param ProbPool probabilistic pool 
+#' @param PoA trophic level
+#'
+SpeciesSampler <- function(divVec, ProbPool, pool, PoA = "P"){
+  # select one site location
+  
+  probSite <- ProbPool[rownames(ProbPool) == names(divVec),]
+  # make a distribution of n sites to pick a species from it 
+  sitesToSample <-replicate(divVec,names(sample(probSite, 1,prob = probSite)))
+  
+  # iterate over this sample and pick a random species from the pool, based on the site to match 
+  if(PoA == "P"){
+    spSampled <- sapply(1:length(sitesToSample), function(x) sample(unique(pool$plantCode[pool$site == sitesToSample[x]]), 1))
+  }
+  
+  if(PoA == "A"){
+    spSampled<-  sapply(1:length(sitesToSample), function(x) sample(unique(pool$animalCode[pool$site == sitesToSample[x]]), 1))
+  }
+  
+  return(spSampled)
+}
+
+
+
+#'
+#'NullTraitDiv
+#'
+#'a funtion that feeds on "SpeciesSampler function over diversity vector, change n in `replicate` to change the number of replicates
+#'@param divVec diversity vector 
+#'@param ProbPool probabilistic species pool
+#'@param pool Species pool 
+#'@param nrep number of replicates
+#'@param PoA trophic level
+#'
+
+NullTraitDiv <- function(divVec,ProbPool, pool, nrep, PoA ){
+  NullSites <- sapply(1:length(divVec),
+                      function(x)
+                        replicate(nrep,
+                                  SpeciesSampler(divVec[x], ProbPool, pool, PoA )))
+  
+  names(NullSites) <- names(divVec)
+  return(NullSites)
+  
+}
+
+
+#'
+#'ZdisCalR
+#'
+#' a function that accepts NullTr and iterates based on site name and returns the distribution of range of null models 
+#' @param sitename Site name 
+#' @param NullTr Null distribution 
+#' @param PoA Trophic level
+#'
+ZdisCalR <- function(sitename, NullTr, PoA = "P"){
+  
+  toAg <- NullTr[NullTr$L1 == sitename,]
+  if(PoA == "P"){ 
+    AgRang <- aggregate(toAg$RQLp, list(toAg$Var2), range)
+  }
+  if(PoA == "A"){
+    AgRang <- aggregate(toAg$RQLa, list(toAg$Var2), range)
+  }
+  Zdis <- abs(AgRang$x[,1]-AgRang$x[,2])
+  return(Zdis)
+}
+
+
+#'
+#'ZdisCalR
+#'
+#' helper function that accepts NullTr and iterates based on site name and returns the distribution of sd of null models 
+#' @param sitename Site name 
+#' @param NullTr Null distribution 
+#' @param PoA Trophic level
+#' 
+ZdisCalSD <- function(sitename, NullTr, PoA = "P"){
+  toAg <- NullTr[NullTr$L1 == sitename,]
+  if(PoA == "P"){
+    AgRang <- aggregate(toAg$RQLp, list(toAg$Var2), sd)
+  }
+  if(PoA == "A"){
+    AgRang <- aggregate(toAg$RQLa, list(toAg$Var2), sd)
+  }
+  return(AgRang$x)
+}
+
+
+
+
+######
+# NullNetMod: function to generate null networks from a given pool and a site-selection probability metrics. Options are to toogle off between filtered and non-filtered communities.  
+## Interactions are mantained neutral 
+########
+#'
+#'NullNetMod
+#'
+#'function to generate null networks from a given pool and 
+#'a site-selection probability metrics. Options are to toogle off
+#' between filtered and non-filtered communities. Interactions are mantained neutral 
+#' 
+#' @param pool Species pool
+#' @param ProbPool Probabilistic pool 
+#' @param repPool number of replicates to sample 
+#' @param NPlant Null plant
+#' @param NAnimal Null animal
+#' @param SiteName Site name
+#' @param netRep network replicates
+#' @param nulltype type of null distribution
+
+
+NullNetMod <- function(pool, ProbPool, repPool, NPlant = T, NAnimal = T, SiteName, netRep, nulltype){
+  
+  atab <- table(pool$animalCode, pool$site)
+  atab[atab>1] <- 1
+  
+  ptab <- table(pool$plantCode, pool$site)
+  ptab[ptab>1] <- 1
+  
+  
+  AnimalRich <- colSums(atab)
+  PlantRich <- colSums(ptab)
+  
+  
+  # if the communities are neutral 
+  
+  if(NAnimal == T){
+    AnimalSide <- SamplePoolComm(pool = pool, 
+                                 nrep = repPool, 
+                                 side = "A", 
+                                 ProbPool = ProbPool )
+    # simulate pseudo-abundances at the pool level
+    animals <- table(droplevels(AnimalSide$SpecName[AnimalSide$Site == SiteName]))
+    # standardize into relative abundances
+    animals <- animals/sum(animals)
+    # sample local communtiies
+    animals <- sample(animals, AnimalRich[SiteName], prob = animals)
+    # standarize to relative abundances
+    animals <- animals/sum(animals)
+    
+  }else{ 
+    # if communities are the observed 
+    animals <- table((pool$animalCode[pool$site == SiteName]))
+    animals <- animals/sum(animals)
+  }
+  
+  if(NPlant == T){
+    
+    PlantSide <- SamplePoolComm(pool = pool, 
+                                nrep = repPool, 
+                                side = "P", 
+                                ProbPool = ProbPool )
+    
+    # simulate pseudo-abundances at the pool level
+    plants <- table((PlantSide$SpecName[PlantSide$Site == SiteName]))
+    # standardize into relative abundances
+    plants <- plants/sum(plants)
+    # sample local communtiies
+    plants <- sample(plants, PlantRich[SiteName], prob = plants)
+    # standarize to relative abundances
+    plants <- plants/sum(plants)
+  }else{
+    plants <- table(pool$plantCode[pool$site == SiteName])
+    plants <- plants/sum(plants)
+  }
+  
+  
+  # recreate the metanetwork
+  int <- data.frame(expand.grid(plants,animals), expand.grid(names(plants),names(animals)))
+  names(int) <- c("relAbPlant", "relAbAni", "PlantID", "AnimalID")
+  int$probInt <- int$relAbPlant * int$relAbAni
+  
+  
+  
+  # Get the interaction richness per site
+  intDiv <- table(pool$intID, pool$site)
+  intDiv[intDiv>1] <- 1
+  intDiv <- colSums(intDiv)
+  
+  # Randomly sample the metanetwork based on the interaction richness observed at site (To simulate neutral interactions)
+  netSam <- int[sample(1:length(int[,1]), intDiv[SiteName], prob = int$probInt  ),]
+  
+
+  
+  intData2 <- table(netSam$PlantID, netSam$AnimalID)
+  intData2[intData2 >= 1] <- 1
+  attributes(intData2)$class <- "matrix"
+  
+  # # null models
+  null1 <- NullModSen(intData2, netRep, nulltype)
+  # 
+  # # Calculate  z-score Modularity
+  zMod.net1 <- (bipartite::LPA_wb_plus(intData2)$modularity - null1[[1]]["NulMod.mean"]) / null1[[1]]["NulMod.sd"]
+  # 
+  # # Calculate z-score Nestedness 
+  # 
+  zNes.net1 <- (bipartite::nested(intData2, method = "NODF2") - null1[[1]]["NulNest.mean"]) / null1[[1]]["NulNest.sd"]
+  
+  
+  
+  return(c("Q"= zMod.net1, "NODF" = zNes.net1))
+}
+
+
+
+#' SamplePoolComm 
+#' 
+#' Crop of test4EF function to retrieve species names and not calculate effect sizes
+#' @param pool Species pool
+#' @param traitName trait name
+#' @param nrep number of replicates
+#' @param side trophic level
+#' @param ProbPool Probabilistic species pool 
+#' 
+############
+SamplePoolComm <- function(pool,
+                           traitName, 
+                           nrep = 100,
+                           side = c("P","A"),
+                           ProbPool = ProbPool){
+  
+  if(side == "P"){
+    divVecPlant <- colSums(ifelse(table(pool$plantCode,pool$site) > 1, 1,0))
+    # plants
+    NullTr <- NullTraitDiv(divVecPlant,ProbPool,pool, nrep , "P")
+    NullTr <- reshape2::melt(NullTr)
+    NullTr$RQLp <- pool$RQLp[match(NullTr$value,pool$plantCode )]
+    
+  }
+  if(side == "A"){
+    divVecAn <- colSums(ifelse(table(pool$animalCode,pool$site) > 1, 1,0))
+    # animals 
+    NullTr <- NullTraitDiv(divVecAn,ProbPool,pool, nrep, "A" )
+    NullTr <- reshape2::melt(NullTr)
+    NullTr$RQLa <- pool$RQLa[match(NullTr$value,pool$animalCode )]
+    
+  }
+  
+  names(NullTr) <- c("SpeciesSamID","PoolID", "SpecName", "Site",  names(NullTr)[5])
+  return(NullTr)
+}
+
+#' 
+SamplePoolComm <- function(pool,
+                           traitName, 
+                           nrep = 100,
+                           side = c("P","A"),
+                           ProbPool = ProbPool){
+  
+  if(side == "P"){
+    divVecPlant <- colSums(ifelse(table(pool$plantCode,pool$site) > 1, 1,0))
+    # plants
+    NullTr <- NullTraitDiv(divVecPlant,ProbPool,pool, nrep , "P")
+    NullTr <- reshape2::melt(NullTr)
+    NullTr$RQLp <- pool$RQLp[match(NullTr$value,pool$plantCode )]
+    
+  }
+  if(side == "A"){
+    divVecAn <- colSums(ifelse(table(pool$animalCode,pool$site) > 1, 1,0))
+    # animals 
+    NullTr <- NullTraitDiv(divVecAn,ProbPool,pool, nrep, "A" )
+    NullTr <- reshape2::melt(NullTr)
+    NullTr$RQLa <- pool$RQLa[match(NullTr$value,pool$animalCode )]
+    
+  }
+  
+  names(NullTr) <- c("SpeciesSamID","PoolID", "SpecName", "Site",  names(NullTr)[5])
+  return(NullTr)
+}
+
+
+### Make binary 
+
+#' makeBinar
+#' 
+#' function to remove non interacting species 
+
+makeBinar <- function(matrix){
+  matrix2 <-matrix[as.logical(rowSums(matrix != 0)),
+                  as.logical(colSums(matrix != 0))]
+  colnames(matrix2) <- colnames(matrix)[as.logical(colSums(matrix != 0))]
+  rownames(matrix2) <- rownames(matrix)[as.logical(rowSums(matrix != 0))]
+  matrix2 <- as.matrix.data.frame(matrix2)
+  
+  
+  
+  
+  return(matrix2)
+  
+  
+}
+
+#' function to give color based on vector
+
+f <- function(x,n=10, pal, rev = F){
+  if(rev == F){ 
+    rev(RColorBrewer::brewer.pal(n, pal))[cut(x,n)]
+  }else{
+    (RColorBrewer::brewer.pal(n, pal))[cut(x,n)]
+  }
+}
+
+## Function to plot density kernel on trait matching
+
+
+
+plotCont <- function(i, intRQL){
+  
+  graph <- unique(intRQL[intRQL$site == i,])
+  a <- graph$RLQan
+  b <- graph$RLQpla
+  f1 <- kde2d(a, b, n = 100)
+  f1$z <- ifelse(f1$z > 0.7, 0.7,f1$z)
+  
+  par(cex.axis = 2)
+  filled.contour(x= f1$x,
+                 y = f1$y,
+                 z=f1$z,
+                 cex.axis = 2,
+                 frame = F,
+                 zlim = c(0,0.7),
+                 xlim = c(-5,1.5),
+                 ylim = c(-5,1.5))
+  
+  
+  
+}  
 
 
