@@ -43,7 +43,7 @@ library(Rmisc)
 library(spatstat)
 
 # load raw coordinates of collection data 
-locCoord <- readxl::read_xlsx("data_package/data/CoordinatesEcuador.xlsx") ## path can change
+locCoord <- readxl::read_xlsx("data/CoordinatesEcuador.xlsx") ## path can change
 # get centroids for each of collected sites
 centroids <- data.frame("lon" = aggregate(locCoord$Lon, by = list(locCoord$Plot), mean)$x,
                         "lat" = aggregate(locCoord$Lat, by = list(locCoord$Plot), mean)$x,
@@ -52,10 +52,10 @@ centroids <- data.frame("lon" = aggregate(locCoord$Lon, by = list(locCoord$Plot)
 # Load environmental resistance layers (exported from earthengine, https://code.earthengine.google.com/14fe67bd4749c1f90a253f6cfaa05ff9)
 
 # path can change 
-SlopeLoja <- raster::raster("data_package/data/LojaSlope.tif")
-ClimLoja <- raster::raster("data_package/data/LojaClim.tif")
-PrecLoja <- raster::raster("data_package/data/LojaPrec.tif")
-ElevLoja <- raster::raster("data_package/data/LojaElevation.tif")
+SlopeLoja <- raster::raster("data/LojaSlope.tif")
+ClimLoja <- raster::raster("data/LojaClim.tif")
+PrecLoja <- raster::raster("data/LojaPrec.tif")
+ElevLoja <- raster::raster("data/LojaElevation.tif")
 
 
 # Let's apply the custom made function to calculate cost-path distances in environmental space and standardize the distance matrices based on their range maxima 
@@ -145,7 +145,7 @@ library(bipartite)
 library(ade4)
 library(FD)
 library(picante)
-load("data_package/data/dataSet1.RData")
+load("data/dataSet1.RData")
 ################################################################################
 # check data
 ################################################################################
