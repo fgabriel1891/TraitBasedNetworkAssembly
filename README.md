@@ -5,8 +5,7 @@
 
 Code to replicate the analyses and figures shown in:
 # Trait-based inference of ecological network assembly
-## Emma-Liina Marjakangas ^1^ 
-,_2,\*, Gabriel Muñoz 3 \*, Shaun Turney 3 \*, Jörg Albrecht4, Eike Lena Neuschulz4, Matthias Schleuning4, Jean-Philippe Lessard3
+## Emma-Liina Marjakangas <sup>1</sup>,<sup>2</sup>,\*, Gabriel Muñoz <sup>3</sup>\*, Shaun Turney <sup>3</sup> \*, Jörg Albrecht <sup>4</sup>, Eike Lena Neuschulz <sup>4</sup>, Matthias Schleuning <sup>4</sup>, Jean-Philippe Lessard <sup>4</sup>
 
 -----------
 1 Centre for Biodiversity Dynamics, Department of Biology, Norwegian University of Science and Technology, N-7491 Trondheim, Norway
@@ -20,7 +19,9 @@ Code to replicate the analyses and figures shown in:
 * These authors contributed equally to this study
 -----------
 
+#### Corresponding author: Gabriel Muñoz - gabriel.munoz@concordia.ca
 
-Comments, bugs, and/or suggestions please open an issue [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
 
-#### Contact: Gabriel Muñoz - gabriel.munoz@concordia.ca
+
+**Comments, bugs, and/or suggestions please open an issue** [here](https://github.com/fgabriel1891/TraitBasedNetworks/issues/new)
+
