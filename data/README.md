@@ -2,7 +2,7 @@
 ## **Background information on the network assembly simulations**
 
 Simulation parameters for all scenarios tested of bipartite network assembly can be found as a Table in Supplementary Material S1. 
-The functions to replicate the assembly scenarios can also run in parallel. To replicate the full scenario list, we recomend running the scripts in a computer cluster. 
+The functions to replicate the assembly scenarios can also run in parallel. To replicate the full scenario list, we recomend running the simulation scripts in a computer cluster. 
 
 
 ## **Background information about the plant–frugivore interaction data used in the case study**
