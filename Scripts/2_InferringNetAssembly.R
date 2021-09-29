@@ -41,9 +41,11 @@ library(FD)
 library(picante)
 library(Rmisc)
 library(spatstat)
+library(RStoolbox)
+library(MASS)
 
 # load raw coordinates of collection data 
-locCoord <- readxl::read_xlsx("data/CoordinatesEcuador.xlsx") ## path can change
+locCoord <- readxl::read_xlsx("data_package/data/CoordinatesEcuador.xlsx") ## path can change
 # get centroids for each of collected sites
 centroids <- data.frame("lon" = aggregate(locCoord$Lon, by = list(locCoord$Plot), mean)$x,
                         "lat" = aggregate(locCoord$Lat, by = list(locCoord$Plot), mean)$x,
@@ -52,82 +54,114 @@ centroids <- data.frame("lon" = aggregate(locCoord$Lon, by = list(locCoord$Plot)
 # Load environmental resistance layers (exported from earthengine, https://code.earthengine.google.com/14fe67bd4749c1f90a253f6cfaa05ff9)
 
 # path can change 
-SlopeLoja <- raster::raster("data/LojaSlope.tif")
-ClimLoja <- raster::raster("data/LojaClim.tif")
-PrecLoja <- raster::raster("data/LojaPrec.tif")
-ElevLoja <- raster::raster("data/LojaElevation.tif")
+SlopeLoja <- raster::raster("data_package/data/LojaSlope.tif")
+ClimLoja <- raster::raster("data_package/data/LojaClim.tif")
+PrecLoja <- raster::raster("data_package/data/LojaPrec.tif")
+ElevLoja <- raster::raster("data_package/data/LojaElevation.tif")
 
 
-# Let's apply the custom made function to calculate cost-path distances in environmental space and standardize the distance matrices based on their range maxima 
+# Let's apply the custom made function to calculate cost-path distances in
+# environmental space and standardize the distance matrices based on their range maxima 
 
 eDistSlope <- CustomCostDist(SlopeLoja, centroids)
 eDistTemp <- CustomCostDist(ClimLoja, centroids)
 eDistPrec <- CustomCostDist(PrecLoja, centroids)
 eDistElev <- CustomCostDist(ElevLoja, centroids)
 
-# standardize variables
+# normalize variables
 
 slopeDist <- decostand(eDistSlope, "range")
 ClimDist <- decostand(eDistTemp, "range")
 eDistPrec <- decostand(eDistPrec, "range")
 eDistElev <- decostand(eDistElev, "range")
 
-# Reducing the dimensionality of the environmental distance matrices into linear components
+## Geographical distance matrix 
+LCPMat <- decostand((slopeDist+ClimDist+eDistPrec+eDistElev), "range")
 
-pcaSlope <- princomp(slopeDist)
-pcaTemp <- princomp(ClimDist)
-pcaPrec <- princomp(eDistPrec)
-pcaElev <- princomp(eDistElev)
+## Generating environmental distance matrix 
+
+# extract env data from site (added buffer)
+EnvDat <- data.frame("Slope" = extract(SlopeLoja,round(centroids[,1:2], 3)),
+                     "Clim" = extract(ClimLoja,round(centroids[,1:2], 3)),
+                     "Prec" = extract(PrecLoja,round(centroids[,1:2], 3)),
+                     "Elev" = extract(ElevLoja,round(centroids[,1:2], 3)))
+
+# PCA to reduce dimensionality and extract scores of 1 axis to calculate euc.distances
+
+SiteScor <- scores(rda(EnvDat))$sites[,1]
+names(SiteScor) <- centroids$site
+EnvMat <- dist(SiteScor)
+# normalize
+EnvMat <- decostand(EnvMat, "range")
+
+# Get Probability matrix to sample species from sites by assigning equal weights to dispersal and establishment 
+
+ProbPool <- ((1-EnvMat)*0.5 + (1-LCPMat)*0.5)
+
+png("ElevLoja.png", 
+    500, 500, pointsize = 20)
+par(mar = c(2,2,2,2))
+plot(ElevLoja, box = F, frame  = F, yaxt = "n",
+     col = RColorBrewer::brewer.pal(4, "Greys")
+)
+#axis(2)
+points(round(centroids[,1:2], 3))
+
+dev.off()
+
+png("SlopeLoja.png", 
+    500, 500, pointsize = 20)
+par(mar = c(2,2,2,2))
+plot(SlopeLoja, box = F, frame  = F, yaxt = "n",
+     col = RColorBrewer::brewer.pal(4, "Greys")
+)
+points(round(centroids[,1:2], 3))
+
+dev.off()
+png("ClimLoja.png", 
+    500, 500, pointsize = 20)
+par(mar = c(2,2,2,2))
+plot(ClimLoja/10, box = F, frame  = F,yaxt = "n",
+     col = RColorBrewer::brewer.pal(4, "Greys")
+)
+points(round(centroids[,1:2], 3))
+dev.off()
+png("PrecLoja.png", 
+    500, 500, pointsize = 20)
+par(mar = c(2,2,2,2))
+plot(PrecLoja, box = F, frame  = F,yaxt = "n",
+     col = RColorBrewer::brewer.pal(4, "Greys")
+)
+points(round(centroids[,1:2], 3))
+dev.off()
+
+image_append(c(
+image_trim(image_read("ElevLoja.png")),
+image_trim(image_read("SlopeLoja.png")),
+image_trim(image_read("ClimLoja.png")),
+image_trim(image_read("PrecLoja.png"))),
+F)
 
 
-# It seems that 2 components for each variable are sufficient and explain most of the variance of each environmental distance matrix
-# Let's put together  a new data.frame with the relevant components 
-
-EnvVar <- data.frame("Temp" =scores(pcaTemp)[,c(1:2)],
-                     "Slope" =scores(pcaSlope)[,c(1:2)],
-                     "Prec" =scores(pcaPrec)[,c(1:2)],
-                     "Elev" =scores(pcaElev)[,c(1:2)])
 
 
-# make a new PCA to further reduce dimensionality
-EnvPCA <- vegan::rda(EnvVar)
+png("EnvMat.png", 
+    500, 500, pointsize = 20)
+par(oma = c(3,3,3,3))
+heatmap(1-EnvMat)
+dev.off()
 
-# extract scores from the first axis
-siteScores <- scores(EnvPCA)$sites[,1]
-# calculate pairwise euclidian distances from first axis 
-# and normalize to inverse of max distance to create a probability distribution
-distAx1 <- dist(siteScores)
-probMatrix <- 1-(distAx1/max(distAx1))
+png("LCPMat.png", 
+    500, 500, pointsize = 20)
+par(oma = c(3,3,3,3))
+heatmap(1-LCPMat)
+dev.off()
 
-
-# We have defined now our probability matrix for the environmental variables, this represents the probabilities of species contribution 
-# from each of the site communities to generate the species pools for any other site. 
-# Based only on environmental variables (slope, elevation, precipitation, temperature)
-
-probMatrix # environmental probability matrix 
-
-# Since we have defined our environmental probabilities, let's now define the geographic probabilities. 
-# We will do this by calculating simple euclidean distances from one site to another (i.e. as the crow flies distances). 
-# We will transform this matrix into a probabilistic one, using the same equation we used above for the environmental matrix 
-# $$ 1-\frac{D}{max(D)}$$ being now D, the pairwise euclidian distances in geographical space. 
-
-## construct now a probability matrix based on euclidean distances (as the crow flies)
-EucDist <- spatstat::pairdist(centroids$lat, centroids$lon)
-# name matrix appropiately
-rownames(EucDist) <- colnames(EucDist) <- centroids$site
-# standardize 
-EucDist <- decostand(EucDist, "range")
-# make into probMat
-EucDist <- 1-EucDist
-EucDist # probability matrix
-
-# Since we have now our environmental and geographical matrices let's combine them into a single one. 
-# We will do this by assigning equal weights to each one. Since they are both normalized into a 0-1 range we can use the sum of both matrices multiplied each by the same scalar (0.5)
-# $$ PM = 0.5EM + 0.5GM $$ where $PM$ = the probabilistic matrix to sample sites when generating our species pools, $EM$ = Environmental probability matrix, $GM$ Geographical probability matrix. 
-
-## weight the probability matrix based on environmental variables, with the one of simple euclidean distances, assign equal weights
-ProbPool <- (0.5*(EucDist))+ (0.5*(as.matrix(probMatrix)))
-
+png("ProbPool.png", 
+    500, 500, pointsize = 20)
+par(oma = c(3,3,3,3))
+heatmap(ProbPool)
+dev.off()
 
 ######
 # a) Applying the null model approach to the empirical data 
@@ -145,7 +179,7 @@ library(bipartite)
 library(ade4)
 library(FD)
 library(picante)
-load("data/dataSet1.RData")
+load("data_package/data/dataSet1.RData")
 ################################################################################
 # check data
 ################################################################################
@@ -189,6 +223,9 @@ duA <- dudi.pca(as.data.frame(aTRLQ), scannf = FALSE, center = TRUE, scale = TRU
 ################################################################################
 RLQ <- rlq(duP, coa, duA, scannf = FALSE, nf = 4)
 RLQ
+
+par(oma = c(4,4,4,4))
+heatmap(as.matrix(RLQ$tab))
 ################################################################################
 # perform permutation tests
 ################################################################################
@@ -367,6 +404,13 @@ myEF_pro_sd_p <- test4EF(pool = pool,
                          sdOrRange = "sd",
                          RoP = "Prob",
                          ProbPool = ProbPool )
+myEF_pro_sd_p1 <- test4EF(pool = pool, 
+                         traitName = "RQLp",
+                         nrep = 100, 
+                         side = "P", 
+                         sdOrRange = "sd",
+                         RoP = "Prob",
+                         ProbPool = ProbPool )
 myEF2_pro_sd_a <- test4EF(pool = pool, 
                           traitName = "RQLa", 
                           nrep = 100, 
@@ -374,6 +418,14 @@ myEF2_pro_sd_a <- test4EF(pool = pool,
                           sdOrRange = "sd",
                           RoP = "Prob", 
                           ProbPool = ProbPool )
+myEF2_pro_sd_a1 <- test4EF(pool = pool, 
+                          traitName = "RQLa", 
+                          nrep = 100, 
+                          side = "A", 
+                          sdOrRange = "sd",
+                          RoP = "Prob", 
+                          ProbPool = ProbPool )
+
 # probabilistic pool -range
 myEF_pro_ran_p <- test4EF(pool = pool, 
                           traitName = "RQLp", 
@@ -399,28 +451,6 @@ EFSizeDF <- data.frame(myEF_r_sd_p,
                        myEF2_pro_sd_a,
                        myEF_pro_ran_p,
                        myEF2_pro_ran_a)
-
-
-
-
-
-
-N2 <- xtabs(frequency ~ plantCode + animalCode + site, data = dataSet1$N)
-
-
-
-
-color <- c(rep("blue", dim(makeBinar(N2[,,2]))[1]), 
-           rep("red", dim(makeBinar(N2[,,2]))[2]))
-
-graph <- igraph::graph_from_incidence_matrix(makeBinar(N2[,,2]))
-igraph::plot.igraph(graph,
-                    vertex.label = NA,
-                    vertex.size = 8,
-                    vertex.color = color,
-                    edge.curved = T)
-
-
 
 
 ########################
@@ -551,7 +581,7 @@ colnames(CoRnIn_x)<- names(CoRnIn)
 
 PSdir <- data.frame("PSdir_random_range" = log(abs(myEF2_r_ran_a)/abs(myEF_r_ran_p)),
                     "PSdir_random_sd" = log(abs(myEF2_r_sd_a)/abs(myEF_r_sd_p)),
-                    "PSdir_process_range" = log(abs(myEF2_pro_ran_a)/abs(myEF_pro_sd_p)),
+                    "PSdir_process_range" = log(abs(myEF2_pro_ran_a)/abs(myEF_pro_ran_p)),
                     "PSdir_process_sd" = log(abs(myEF2_pro_sd_a)/abs(myEF_pro_sd_p)))
 
 
@@ -568,7 +598,8 @@ netSites <- xtabs(frequency~plantCode + animalCode + site,pool)
 nullDist <- apply(netSites, 3, NullModSen,100, "DD")
 # make binary to calculate observed modularity
 netSites <- apply(netSites, 3, makeBinar)
-obsModular <- sapply(1:6, function(x) bipartite::computeModules(netSites[[x]])@likelihood)
+obsModular <- sapply(1:6, function(x)
+  bipartite::computeModules(netSites[[x]])@likelihood)
 obsNested <- sapply(1:6, function(x) vegan::nestednodf(netSites[[x]])$statistic[["NODF"]])
 Zscores <- sapply(1:6, function(x) (obsModular[x] -nullDist[[x]][[1]]["NulMod.mean"]) / nullDist[[x]][[1]]["NulMod.sd"])
 Zscores_nes <- sapply(1:6, function(x) (obsNested[x] -nullDist[[x]][[1]]["NulNest.mean"]) / nullDist[[x]][[1]]["NulNest.sd"])
@@ -803,30 +834,25 @@ par(mfrow = c(1,1), oma = c(2,2,2,2), mar = c(5,5,2,2))
 
 plot(-myEF_pro_sd_p,elev_vec1, frame= F,
      xlim = c(-3,3),
-     pch = 16,
+     pch = 21,
      ylim  = c(0,4000),
      cex.lab = 1.5,
      cex.axis = 1,
      xlab = "Strength of community assembly",
      ylab = "Elevation",
-     col = scales::alpha("#B22222", 0.7),
+     bg = scales::alpha("#B22222", 1),
      cex = 1.5)
 segments(0,elev_vec1,-myEF_pro_sd_p,elev_vec1, col = "#B22222", lwd = 2)
-points(-myEF_pro_sd_p,elev_vec1,
-       cex =1.5, 
-       pch = 1)
 abline(v=0)
 abline(h = c(500,1500, 2500,3500), lty = 2)
 points(-myEF2_pro_sd_a,c(elev_vec2),
        ylim = c(-3,8), 
-       pch = 16,
+       pch = 21,
        xlim  = c(0,4000),
-       col = scales::alpha("#256B92", 1),
+       bg = scales::alpha("#256B92", 1),
        cex = 1.5)
 segments(0,elev_vec2,-myEF2_pro_sd_a,elev_vec2, col = "#256B92" ,lwd = 2)
-points(-myEF2_pro_sd_a,c(elev_vec2),
-       cex = 1.5, 
-       pch = 1)
+
 mtext("A",3, outer = T, adj = 0 , cex = 2)
 legend(1.7,1600, "*", bty = "n", cex = 2)
 mtext("Trait overdispersion",3, outer = F, adj = 0 , cex = 1)
@@ -838,29 +864,26 @@ dev.off()
 png("PSA.png", width = 1000, height = 1000, pointsize = 20, res = 110)
 par(mfrow = c(1,1), oma = c(2,2,2,2), mar = c(5,5,2,2))
 
-plot(elev_vec2[order]~stPSS[order],
-     pch = 16,
+plot(elev_vec2[order]~(-stPSS)[order],
+     pch = 21,
      frame = F,
      xlab = "Process strength asymmetry",
      ylab = "Elevation",
      cex = 1.5,
      cex.lab = 1.5,
      xlim = c(-1,1),
-     col = ifelse(stPSS[order]>0, "#256B92", "#B22222"), 
+     bg = ifelse(stPSS[order]>0, "#256B92", "#B22222"), 
      ylim = c(0,4000))
 
-segments(0,elev_vec2[order],stPSS[order],
+segments(0,elev_vec2[order],(-stPSS)[order],
          elev_vec2[order], 
          col = ifelse(stPSS[order]>0, "#256B92", "#B22222"), 
          lwd = 2)
-points(elev_vec2[order]~stPSS[order],
-       cex = 1.5,
-       col = ifelse(stPSS[order]>0, "#256B92", "#B22222"), 
-       pch = 1)
+
 abline(h = c(500,1500,2500,3500), v = 0,lty = 2)
 mtext("B",3, outer = T, adj = 0 , cex = 2)
-mtext("Consumer driven",3, outer = F, adj = 0 , cex = 1)
-mtext("Resource driven",3, outer = F, adj = 1 , cex = 1)
+mtext("Consumer driven",3, outer = F, adj = 1 , cex = 1)
+mtext("Resource driven",3, outer = F, adj = 0 , cex = 1)
 
 
 dev.off()
@@ -868,7 +891,7 @@ png("StructureChange.png", width = 1000, height = 1000, pointsize = 20, res = 11
 
 par(mfrow = c(1,1), oma = c(2,2,2,2), mar = c(5,5,2,2))
 
-elev_vec <- dataSet1$N$elevation[match(names(myEF_pro_sd_p),dataSet1$N$site)]
+elev_vec <- dataSet1$N$elevation[match(names(myEF_pro_sd_p1),dataSet1$N$site)]
 elev_vec1 <- c(elev_vec-c(-150, -150, +250, +350, +250, -150))
 elev_vec2 <- c(3250,1250, 2850, 750, 1850, 2250)
 
@@ -914,7 +937,67 @@ dev.off()
 
 
 
-  elev_vec <- dataSet1$N$elevation[match(names(myEF_pro_sd_p),dataSet1$N$site)]
+  elev_vec <- dataSet1$N$elevation[match(names(myEF_pro_sd_p1),dataSet1$N$site)]
+  elev_vec1 <- c(elev_vec-c(-150, -150, +250, +350, +250, -150))
+  elev_vec2 <- c(3250,1250, 2850, 750, 1850, 2250)
+  
+  
+  
+  
+  
+  
+  png("AssemblyMode.png", width = 1000, height = 1000, pointsize = 20, res = 110)
+  par(mfrow = c(1,1), oma = c(2,2,2,2), mar = c(5,5,2,2))
+  
+  assMode <- log(abs(SESnet_mod$Consumers)/abs(SESnet_mod$Resources))
+  assMode2 <- log(abs(SESnet_nes$Consumers)/abs(SESnet_nes$Resources))
+  
+  plot(elev_vec2[order]~assMode[order],
+       pch = 16,
+       frame = F,
+       xlab = "Network assembly mode",
+       ylab = "Elevation",
+       cex = 1.5,
+       cex.lab = 1.5,
+       ylim = c(0,4000),
+       col = "#9C413D",
+       xlim = c(-7,7))
+  segments(0,elev_vec2[order],assMode[order],
+           elev_vec2[order], 
+           col = "#9C413D",
+           lwd = 2)
+  
+  points(elev_vec1[order]~assMode2[order],
+         col = "#9C413D",
+         cex = 1.5,
+         pch = 1)
+  
+  segments(0,elev_vec1[order],assMode2[order],
+           elev_vec1[order], 
+           col = "#9C413D", 
+           lwd = 1)
+  abline(h = c(500,1500,2500,3500), v = 0,lty = 2)
+  mtext("D",3, outer = T, adj = 0 , cex = 2)
+  mtext("Bottom-up",3, outer = F, adj = 0 , cex = 1)
+  mtext("Top-down",3, outer = F, adj = 1 , cex = 1)
+  
+  legend("bottomright", 
+         pch=c(16,1),
+         col = "#9C413D",
+         bty = "n",
+         legend = c("Modularity","Nestedness"))
+  dev.off()
+ 
+  
+
+
+
+
+
+
+
+
+  elev_vec <- dataSet1$N$elevation[match(names(myEF_pro_sd_p1),dataSet1$N$site)]
   elev_vec1 <- c(elev_vec-c(-150, -150, +250, +350, +250, -150))
   elev_vec2 <- c(3250,1250, 2850, 750, 1850, 2250)
   
@@ -983,6 +1066,10 @@ dev.off()
       stack = T),
     "Figure4Final.png")
   
+  
+  
+  
+  
   magick::image_write(
         magick::image_append(c(
           magick::image_read("FilteringGradient.png"),
@@ -992,10 +1079,6 @@ dev.off()
   
   ####
   # Appendix images
-  
-  
-  
-  
   
   
   
