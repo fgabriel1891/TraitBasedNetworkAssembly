@@ -184,7 +184,7 @@ snowfall::sfStop()
 ## Step 3) Extract info from simulation output and isolate the niche based effects.
 ############################################################
 
-
+RES_DD$EA
 ## Create an interpretable object  
 
 ## 78 equal scenarios
@@ -404,37 +404,30 @@ matt2[,3] <- (matt2[,3]*50)+50
 #####
 #######
 
-png("SimulRes.png", width = 1000, height = 1000, pointsize = 20, res = 110)
-par(mfrow = c(1,1), oma = c(1,1,3,1), mar = c(4,5,3,2))
+png("SimulRes2.png", 
+    width = 1000, 
+    height = 1000, 
+    pointsize = 20, 
+    res = 110)
+par(mfrow = c(1,1), oma = c(1,1,1,1), mar = c(4,5,3,2), las = 1)
 plot(NODFx~QZscorex,
      frame = F,
-     xlim = c(0, 150),
-     ylim = c(0,250),
-     pch = ifelse( RES_DD$intHyp == "NL", 16, 
-                   ifelse( RES_DD$intHyp == "FL", 15,
-                           17)),
-     col = scales::alpha(ifelse( RES_DD$intHyp == "NL", "#FADE43", 
-                   ifelse( RES_DD$intHyp == "FL", "#E0A738",
-                           "#9C413D")),0.4),
+     xlim = c(30, 150),
+     ylim = c(0,200),
+     pch = ifelse( RES_DD$intHyp == "NL", 23, 
+                   ifelse( RES_DD$intHyp == "FL", 21,
+                           22)),
+     col = "grey80",
+     bg = scales::alpha(ifelse( RES_DD$intHyp == "NL", "#7fc97f", 
+                   ifelse( RES_DD$intHyp == "FL", "#beaed4",
+                           "#fdc086")),0.7),
      xlab = "Modularity (Q Z-score)", 
      ylab = "Nestedness (NODF Z-score)", 
      cex.lab = 1.5,
      cex.axis = 1,
-     cex = 1, 
+     cex = 1.5, 
      data = RES_DD[!RES_DD$EA == "ND",])
-mtext("A",3, outer = T, adj = 0 , cex = 2.5)
 
-Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")],
-                 RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")], 
-                 scales::alpha("#FADE43",0.5), lwd = 3, lty = 2)
-
-Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM")],
-                 RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM")], 
-                 scales::alpha("#9C413D",1), lwd = 3, lty = 2)
-
-Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")],
-                 RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")], lcolor = 
-                scales::alpha("#E0A738",0.5), lwd = 3, lty = 2)
 
 #### 
 # neutral arrows
@@ -445,7 +438,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("NL") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx,
-         lwd = 4, lty = 1, col = scales::alpha("#FADE43",0.9))
+         lwd = 4, lty = 1, col = scales::alpha("#1b9e77",0.4))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("NL"),]$NODFsd,
@@ -453,7 +446,7 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("NL"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL") ,]$QZscorex, 
-         lwd = 4, lty = 1,col = scales::alpha("#FADE43",0.9))
+         lwd = 4, lty = 1,col = scales::alpha("#1b9e77",0.4))
 
 segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscorex
          -RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscoresd,
@@ -461,7 +454,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("MM") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx,
-         lwd = 4, lty = 1, col = scales::alpha("#9C413D",0.9))
+         lwd = 4, lty = 1, col = scales::alpha("#d95f02",0.4))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("MM"),]$NODFsd,
@@ -469,7 +462,7 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("MM"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM") ,]$QZscorex, 
-         lwd = 4, lty = 1,col = scales::alpha("#9C413D",0.9))
+         lwd = 4, lty = 1,col = scales::alpha("#d95f02",0.8))
 
 segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscorex
          -RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscoresd,
@@ -477,7 +470,7 @@ segments("x0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscorex
          +RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$QZscoresd,
          "y0" = RES_DD[RES_DD$EA == "ND"& RES_DD$intHyp %in% c("FL") ,]$NODFx, 
          "y1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx,
-         lwd = 4, lty = 1, col = scales::alpha("#E0A738",0.9))
+         lwd = 4, lty = 1, col = scales::alpha("#7570b3",0.8))
 
 segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx
          -RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("FL"),]$NODFsd,
@@ -485,28 +478,42 @@ segments("y0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$NODFx
          +RES_DD[RES_DD$EA == "ND"  & RES_DD$intHyp %in% c("FL"),]$NODFsd,
          "x0" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$QZscorex, 
          "x1" = RES_DD[RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL") ,]$QZscorex, 
-         lwd = 4, lty = 1,col = scales::alpha("#E0A738",0.9))
+         lwd = 4, lty = 1,col = scales::alpha("#7570b3",0.8))
 ###################
 
+# 
+# Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")],
+#                  RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("NL")], 
+#                  scales::alpha("#7fc97f",0.5), lwd = 3, lty = 2)
+# 
+# Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM")],
+#                  RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("MM")], 
+#                  scales::alpha("#fdc086",1), lwd = 3, lty = 2)
+# 
+# Plot_ConvexHull( RES_DD$QZscorex[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")],
+#                  RES_DD$NODFx[!RES_DD$EA == "ND" & RES_DD$intHyp %in% c("FL")], lcolor = 
+#                 scales::alpha("#beaed4",0.5), lwd = 3, lty = 2)
 
-legend("topleft", 
-       title = "Interaction assembly type",
+
+legend("bottomleft", 
        legend = c("Morphological matching", 
                   "Forbidden links",
                   "Stochastic interactions"),
-       pch = c(2,0,1)+15,
+       pch = c(22,21,23), 
+       pt.bg = c("#d95f02","#7570b3","#1b9e77"),
        cex = 0.7,
        bty = "n",
-       col = c("#9C413D","#E0A738","#FADE43"))
+       lwd = 0.5,
+       col =  c("#d95f02","#7570b3","#1b9e77"))
 
-legend("bottomleft", 
-       title = "Community assembly",
-       legend = c("Environmental filtering", 
-                  "Neutral assembly"),
-       lty = c(2,1), lwd  = c(3,3),
-       cex = 0.7, 
-       bty = "n",
-       col = c("gray80","black"))
+# legend("bottomleft", 
+#        title = "Community assembly",
+#        legend = c("Environmental filtering", 
+#                   "Neutral assembly"),
+#       pch = c("+","+"),
+#        cex = 0.7, 
+#        bty = "n",
+#        col = c("gray80","black"))
 
 
  dev.off()
@@ -559,6 +566,9 @@ mtext("C",3, outer = T, adj = 0 , cex = 2.5)
 dev.off()
 
 
+cor((butd_eff$q_eff)[match(RES_ass$key,butd_eff$key)],c(assdev/max(abs(assdev))),method = "spearman")
+cor((butd_eff$nodf_eff)[match(RES_ass$key,butd_eff$key)],c(assdev2/max(abs(assdev2))), method ="spearman")
+     
 
 ###
 png("BUTD_MOD.png", width = 1000, height = 1000, pointsize = 20, res = 110)
