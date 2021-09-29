@@ -517,6 +517,18 @@ NullModSen =  function(matrix, rep, nulltype ){
                        function(x) bipartite::LPA_wb_plus(vns[[x]])$modularity)
     
   }
+  
+  
+  if(nulltype == "quasiswap_count"){
+    vn <- vegan::nullmodel(matrix, "quasiswap_count")
+    vns <- simulate(vn, rep)
+    null.nest <- sapply(1:rep, function(x) vegan::nestednodf(vns[,,x],weighted = T )$statistic["NODF"])
+    null.mod <- sapply(1:rep, function(x) bipartite::LPA_wb_plus(vns[,,x])$modularity)
+    
+  }
+  
+  
+  
   null = list(c("NulMod" = c("mean" = mean(null.mod),
                              "sd" = sd(null.mod)),
                 "NulNest" = c("mean" = mean(null.nest), 
@@ -1126,7 +1138,14 @@ ZdisCalSD <- function(sitename, NullTr, PoA = "P"){
 #' @param nulltype type of null distribution
 
 
-NullNetMod <- function(pool, ProbPool, repPool, NPlant = T, NAnimal = T, SiteName, netRep, nulltype){
+NullNetMod <- function(pool, ProbPool, 
+                       repPool, 
+                       NPlant = T, 
+                       NAnimal = T, 
+                       SiteName, 
+                       netRep,
+                       nulltype, 
+                       binary = T){
   
   atab <- table(pool$animalCode, pool$site)
   atab[atab>1] <- 1
@@ -1147,7 +1166,7 @@ NullNetMod <- function(pool, ProbPool, repPool, NPlant = T, NAnimal = T, SiteNam
                                  side = "A", 
                                  ProbPool = ProbPool )
     # simulate pseudo-abundances at the pool level
-    animals <- table(droplevels(AnimalSide$SpecName[AnimalSide$Site == SiteName]))
+    animals <- table((AnimalSide$SpecName[AnimalSide$Site == SiteName]))
     # standardize into relative abundances
     animals <- animals/sum(animals)
     # sample local communtiies
@@ -1200,24 +1219,43 @@ NullNetMod <- function(pool, ProbPool, repPool, NPlant = T, NAnimal = T, SiteNam
 
   
   intData2 <- table(netSam$PlantID, netSam$AnimalID)
-  intData2[intData2 >= 1] <- 1
-  attributes(intData2)$class <- "matrix"
+ 
+  if(binary == T){
+    intData2[intData2 >= 1] <- 1
+    attributes(intData2)$class <- "matrix"
+    
+    # # null models
+    null1 <- NullModSen(intData2, netRep, nulltype)
+    # 
+    # # Calculate  z-score Modularity
+    zMod.net1 <- (bipartite::LPA_wb_plus(intData2)$modularity - null1[[1]]["NulMod.mean"]) / null1[[1]]["NulMod.sd"]
+    # 
+    # # Calculate z-score Nestedness 
+    # 
+    zNes.net1 <- (bipartite::nested(intData2, method = "NODF2") - null1[[1]]["NulNest.mean"]) / null1[[1]]["NulNest.sd"]
+    
+    
+    
+    return(c("Q"= zMod.net1, "NODF" = zNes.net1))
+    
+  }
   
-  # # null models
-  null1 <- NullModSen(intData2, netRep, nulltype)
-  # 
-  # # Calculate  z-score Modularity
-  zMod.net1 <- (bipartite::LPA_wb_plus(intData2)$modularity - null1[[1]]["NulMod.mean"]) / null1[[1]]["NulMod.sd"]
-  # 
-  # # Calculate z-score Nestedness 
-  # 
-  zNes.net1 <- (bipartite::nested(intData2, method = "NODF2") - null1[[1]]["NulNest.mean"]) / null1[[1]]["NulNest.sd"]
+  if(binary == F){
+    
+    intData2 <- table(netSam$PlantID, netSam$AnimalID)
+    # # null models
+    null1 <- NullModSen(intData2, netRep, nulltype)
+    # 
+    # # Calculate  z-score Modularity
+    zMod.net1 <- (bipartite::LPA_wb_plus(intData2)$modularity - null1[[1]]["NulMod.mean"]) / null1[[1]]["NulMod.sd"]
+    # 
+    
+    return(c("Q"= zMod.net1, "NODF" = zNes.net1))
+    
+    
+    }
   
-  
-  
-  return(c("Q"= zMod.net1, "NODF" = zNes.net1))
 }
-
 
 
 #' SamplePoolComm 
